@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Cache
+dist/
+build/
+.next/
+.expo/
+.turbo/
+*.log
+
+# Environment variables
+.env
+.env*.local
+
+# IDE & AI
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.gemini/
+
+# Project Context
+context/

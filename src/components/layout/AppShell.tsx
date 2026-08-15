@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { usePathname } from "next/navigation";
+import React, { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { TopNavbar } from "./TopNavbar";
 import { BottomTabBar } from "./BottomTabBar";
 import { ToastContainer } from "../ui/ToastContainer";
@@ -12,9 +12,56 @@ import { NeonButton } from "../ui/NeonButton";
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
-  const { currentUser, isDemoMode, switchDemoUser } = useApp();
+  const router = useRouter();
+  const { currentUser, isDemoMode, switchDemoUser, isLoading } = useApp();
 
   const isAuthPage = pathname === "/login" || pathname === "/pending";
+
+  // Redirect to /login if unauthenticated on protected routes
+  useEffect(() => {
+    if (!isLoading && !currentUser && !isAuthPage) {
+      router.push("/login");
+    }
+  }, [isLoading, currentUser, isAuthPage, router]);
+
+  // Loading Screen while verifying auth status
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-midnight-base text-slate-100 flex items-center justify-center p-4 selection:bg-neon-magenta selection:text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-neon-magenta border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-medium">Loading Swear Jar...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated on a protected route — show clean redirect state
+  if (!currentUser && !isAuthPage) {
+    return (
+      <div className="min-h-screen bg-midnight-base text-slate-100 flex items-center justify-center p-4 selection:bg-neon-magenta selection:text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-neon-magenta border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-medium">Redirecting to sign in...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Auth Screen Dedicated Clean Center Layout
+  if (isAuthPage) {
+    return (
+      <div className="min-h-screen bg-midnight-base text-slate-100 flex items-center justify-center p-4 selection:bg-neon-magenta selection:text-white relative overflow-hidden">
+        {/* Subtle background ambient glows */}
+        <div className="absolute -top-32 -left-32 w-80 h-80 bg-neon-magenta/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-neon-cyan/15 rounded-full blur-3xl pointer-events-none" />
+        <ToastContainer />
+        <main className="w-full flex items-center justify-center relative z-10">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   // Pending Approval Gate Screen
   if (currentUser && currentUser.status === "pending" && pathname !== "/pending") {
@@ -96,11 +143,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Frame Container for mobile & desktop */}
       <div className="w-full max-w-md min-h-screen flex flex-col bg-midnight-base border-x border-white/5 relative shadow-2xl">
-        {!isAuthPage && <TopNavbar />}
+        <TopNavbar />
 
         <main className="flex-1 pb-24 px-4 pt-4">{children}</main>
 
-        {!isAuthPage && <BottomTabBar />}
+        <BottomTabBar />
         <PersonaSwitcher />
       </div>
     </div>

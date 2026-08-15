@@ -23,7 +23,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Swear Jar 2.0 — Social Accountability Ledger",
+  title: "Swear Jar — Social Accountability Ledger",
   description: "A private, real-time social accountability ledger for friend groups to track swear penalties, keeper transfers, and payment obligations.",
   manifest: "/manifest.json",
   icons: {

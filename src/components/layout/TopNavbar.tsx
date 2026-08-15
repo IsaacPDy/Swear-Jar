@@ -27,9 +27,6 @@ export const TopNavbar: React.FC = () => {
               <span className="font-display font-extrabold text-sm tracking-wider text-white group-hover:text-pink-300 transition-colors">
                 SWEAR JAR
               </span>
-              <span className="text-[10px] font-bold text-neon-magenta bg-neon-magenta/10 px-1.5 py-0.2 rounded border border-neon-magenta/20">
-                2.0
-              </span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-[180px]">
               {systemConfig?.groupName || "Friend Group"}

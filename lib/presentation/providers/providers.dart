@@ -4,6 +4,8 @@ import 'package:swear_jar/data/services/firebase_service.dart';
 import 'package:swear_jar/data/repositories/repositories.dart';
 import 'package:swear_jar/domain/models/models.dart';
 
+final firebaseInitErrorProvider = StateProvider<String?>((ref) => null);
+
 final isLiveModeProvider = StateProvider<bool>((ref) => true);
 
 final mockDataServiceProvider = Provider<MockDataService>((ref) {

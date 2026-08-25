@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:swear_jar/presentation/theme/app_theme.dart';
 import 'package:swear_jar/presentation/providers/providers.dart';
 import 'package:swear_jar/presentation/widgets/common_widgets.dart';
+import 'package:swear_jar/presentation/utils/environment_util.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -40,7 +41,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLiveMode = ref.watch(isLiveModeProvider);
+    final isLocalhost = EnvironmentUtil.isLocalhost;
+    // On deployed/non-localhost environments, always enforce Live Mode
+    final isLiveMode = !isLocalhost || ref.watch(isLiveModeProvider);
+    final firebaseInitError = ref.watch(firebaseInitErrorProvider);
     final users = ref.watch(usersListProvider).valueOrNull ?? [];
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
 
@@ -211,6 +215,48 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+                if (firebaseInitError != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentError.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.accentError.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.accentError, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Firebase Setup Warning',
+                              style: GoogleFonts.inter(
+                                color: AppColors.accentError,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          firebaseInitError,
+                          style: GoogleFonts.inter(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (_errorMessage != null) ...[
                   Container(
                     width: double.infinity,
@@ -279,7 +325,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ],
                     ),
                   ),
-                ] else ...[
+                ] else if (isLocalhost) ...[
                   NeonCard(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -307,7 +353,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Select a member profile to test the app offline:',
+                          'Select a member profile to test the app offline (Localhost only):',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: AppColors.textMuted,
@@ -391,28 +437,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
-                TextButton.icon(
-                  onPressed: () {
-                    ref.read(isLiveModeProvider.notifier).state = !isLiveMode;
-                  },
-                  icon: Icon(
-                    isLiveMode
-                        ? Icons.bug_report_outlined
-                        : Icons.cloud_done_outlined,
-                    size: 16,
-                    color: AppColors.textMuted,
-                  ),
-                  label: Text(
-                    isLiveMode
-                        ? 'Switch to Local Demo Mode'
-                        : 'Switch to Live Firebase Mode',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
+                if (isLocalhost) ...[
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: () {
+                      ref.read(isLiveModeProvider.notifier).state = !isLiveMode;
+                    },
+                    icon: Icon(
+                      isLiveMode
+                          ? Icons.bug_report_outlined
+                          : Icons.cloud_done_outlined,
+                      size: 16,
                       color: AppColors.textMuted,
                     ),
+                    label: Text(
+                      isLiveMode
+                          ? 'Switch to Local Demo Mode'
+                          : 'Switch to Live Firebase Mode',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

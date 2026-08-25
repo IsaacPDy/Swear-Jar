@@ -3,20 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:swear_jar/firebase_options.dart';
 import 'package:swear_jar/presentation/theme/app_theme.dart';
+import 'package:swear_jar/presentation/providers/providers.dart';
 import 'package:swear_jar/presentation/screens/navigation_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  String? firebaseInitError;
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
   } catch (e) {
-    debugPrint('Firebase initialization warning: $e');
+    debugPrint('Firebase initialization error: $e');
+    firebaseInitError = e.toString();
   }
   runApp(
-    const ProviderScope(
-      child: SwearJarApp(),
+    ProviderScope(
+      overrides: [
+        if (firebaseInitError != null)
+          firebaseInitErrorProvider.overrideWith((ref) => firebaseInitError),
+      ],
+      child: const SwearJarApp(),
     ),
   );
 }

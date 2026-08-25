@@ -57,5 +57,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Your Profile'), findsOneWidget);
   });
+
+  testWidgets('Swear Jar App shows Firebase warning when init error is provided',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          firebaseInitErrorProvider
+              .overrideWith((ref) => 'Firebase could not connect to project'),
+        ],
+        child: const SwearJarApp(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Firebase Setup Warning'), findsOneWidget);
+    expect(find.text('Firebase could not connect to project'), findsOneWidget);
+  });
 }
 

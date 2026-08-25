@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -17,8 +18,8 @@ class FirebaseDataService
         IConfigRepository {
   static const _uuid = Uuid();
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
   );
@@ -33,6 +34,10 @@ class FirebaseDataService
   }
 
   void _initAuthListener() {
+    if (Firebase.apps.isEmpty) {
+      debugPrint('Firebase is not initialized. Skipping auth listener.');
+      return;
+    }
     _auth.authStateChanges().listen((User? fbUser) async {
       await _userDocSubscription?.cancel();
       if (fbUser == null) {
@@ -109,6 +114,9 @@ class FirebaseDataService
 
   @override
   Future<void> signInWithGoogle() async {
+    if (Firebase.apps.isEmpty) {
+      throw Exception('Firebase is not initialized. Please verify Firebase setup.');
+    }
     try {
       if (kIsWeb) {
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
@@ -128,6 +136,21 @@ class FirebaseDataService
         );
 
         await _auth.signInWithCredential(credential);
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth Error [${e.code}]: ${e.message}');
+      switch (e.code) {
+        case 'popup-closed-by-user':
+          throw Exception('Sign-in cancelled (popup was closed).');
+        case 'unauthorized-domain':
+          throw Exception(
+              'Domain not authorized. Please add this domain to Firebase Console > Authentication > Settings > Authorized domains.');
+        case 'popup-blocked':
+          throw Exception('Sign-in popup was blocked by browser. Please allow popups for this site.');
+        case 'cancelled-popup-request':
+          throw Exception('Sign-in popup request was cancelled.');
+        default:
+          throw Exception(e.message ?? 'Authentication failed (${e.code}).');
       }
     } catch (e) {
       debugPrint('Google Sign In Error: $e');

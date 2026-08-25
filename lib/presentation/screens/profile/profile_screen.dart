@@ -39,7 +39,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
-    final users = ref.watch(usersListProvider).valueOrNull ?? [];
 
     if (currentUser == null) {
       return const Center(child: CircularProgressIndicator());
@@ -254,48 +253,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'QUICK DEMO SWITCHER',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              const SizedBox(height: 10),
-              NeonCard(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    for (final user in users)
-                      ListTile(
-                        leading: UserAvatar(user: user, size: 36),
-                        title: Text(
-                          user.displayName,
-                          style: GoogleFonts.inter(
-                            color: user.id == currentUser.id ? AppColors.accentPrimary : AppColors.textPrimary,
-                            fontWeight: user.id == currentUser.id ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          user.roles.map((r) => r.name).join(', '),
-                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
-                        ),
-                        trailing: user.id == currentUser.id
-                            ? const Icon(Icons.check, color: AppColors.accentPrimary, size: 18)
-                            : TextButton(
-                                onPressed: () {
-                                  ref.read(authRepositoryProvider).signInWithDemo(user.id);
-                                },
-                                child: Text('Switch', style: GoogleFonts.inter(color: AppColors.accentInfo, fontSize: 12)),
-                              ),
-                      ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 24),
               NeonButton(
                 label: 'Sign Out',

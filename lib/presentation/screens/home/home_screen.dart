@@ -75,6 +75,97 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
+              if (!isKeeper && keeper != null && keeper.gcashNumber != null && keeper.gcashNumber!.trim().isNotEmpty) ...[
+                NeonCard(
+                  padding: const EdgeInsets.all(16),
+                  borderColor: AppColors.accentInfo.withValues(alpha: 0.35),
+                  backgroundColor: AppColors.bgSurfaceElevated,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentInfo.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          color: AppColors.accentInfo,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'JAR KEEPER GCASH',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.1,
+                                    color: AppColors.accentInfo,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    '(${keeper.displayName})',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              keeper.gcashNumber!,
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Copy GCash Number',
+                        icon: const Icon(Icons.copy_rounded, color: AppColors.accentInfo, size: 20),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.accentInfo.withValues(alpha: 0.1),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: keeper.gcashNumber!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text('Copied GCash: ${keeper.gcashNumber} to clipboard!'),
+                                ],
+                              ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: AppColors.accentInfo,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               NeonCard(
                 hasGlow: myTotalDebt > 0,
                 borderColor: myTotalDebt > 0 ? AppColors.accentPrimary.withValues(alpha: 0.5) : AppColors.borderDefault,

@@ -32,7 +32,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // In mock mode, user Fiona is logged in by default
+    // In mock mode, user Fiona is logged in by default and Isaac is the active keeper with GCash
+    expect(find.text('JAR KEEPER GCASH'), findsOneWidget);
     expect(find.text('YOUR JAR BALANCE'), findsOneWidget);
     expect(find.text('Report a Swear'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
@@ -56,6 +57,7 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('Your Profile'), findsOneWidget);
+    expect(find.text('QUICK DEMO SWITCHER'), findsNothing);
   });
 
   testWidgets('Swear Jar App shows Firebase warning when init error is provided',

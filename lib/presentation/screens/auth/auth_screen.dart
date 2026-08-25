@@ -5,11 +5,42 @@ import 'package:swear_jar/presentation/theme/app_theme.dart';
 import 'package:swear_jar/presentation/providers/providers.dart';
 import 'package:swear_jar/presentation/widgets/common_widgets.dart';
 
-class AuthScreen extends ConsumerWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends ConsumerState<AuthScreen> {
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref.read(authRepositoryProvider).signInWithGoogle();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLiveMode = ref.watch(isLiveModeProvider);
     final users = ref.watch(usersListProvider).valueOrNull ?? [];
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
 
@@ -59,7 +90,66 @@ class AuthScreen extends ConsumerWidget {
                     NeonButton(
                       label: 'Switch Account / Sign Out',
                       type: NeonButtonType.secondary,
-                      onPressed: () => ref.read(authRepositoryProvider).signOut(),
+                      onPressed: () =>
+                          ref.read(authRepositoryProvider).signOut(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (currentUser != null && currentUser.isRejected) {
+      return Scaffold(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: NeonCard(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentError.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.block_rounded,
+                        size: 40,
+                        color: AppColors.accentError,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Access Denied',
+                      style: GoogleFonts.outfit(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your account membership request was declined by the group Admin.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    NeonButton(
+                      label: 'Sign Out',
+                      type: NeonButtonType.secondary,
+                      onPressed: () =>
+                          ref.read(authRepositoryProvider).signOut(),
                     ),
                   ],
                 ),
@@ -75,7 +165,7 @@ class AuthScreen extends ConsumerWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 440),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -84,7 +174,10 @@ class AuthScreen extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: AppColors.bgSurfaceElevated,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.accentPrimary.withValues(alpha: 0.5), width: 2),
+                    border: Border.all(
+                      color: AppColors.accentPrimary.withValues(alpha: 0.5),
+                      width: 2,
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: AppColors.accentGlow,
@@ -117,106 +210,207 @@ class AuthScreen extends ConsumerWidget {
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 36),
-                NeonCard(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Demo Quick Sign-In',
-                        style: GoogleFonts.outfit(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
+                const SizedBox(height: 32),
+                if (_errorMessage != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentError.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.accentError.withValues(alpha: 0.3),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Select a member profile to test the app locally:',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      for (final user in users) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: InkWell(
-                            onTap: () {
-                              ref.read(authRepositoryProvider).signInWithDemo(user.id);
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgSurfaceElevated,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: user.isKeeper
-                                      ? AppColors.accentPrimary.withValues(alpha: 0.4)
-                                      : AppColors.borderDefault,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  UserAvatar(user: user, size: 36),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          user.displayName,
-                                          style: GoogleFonts.inter(
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.textPrimary,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        Text(
-                                          user.roles.map((r) => r.name.toUpperCase()).join(' • '),
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color: user.isKeeper
-                                                ? AppColors.accentPrimary
-                                                : AppColors.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (user.isPending)
-                                    const StatusPill(
-                                      label: 'Pending',
-                                      color: AppColors.accentWarning,
-                                      icon: Icons.hourglass_empty,
-                                    )
-                                  else
-                                    const Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 14,
-                                      color: AppColors.textMuted,
-                                    ),
-                                ],
-                              ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: AppColors.accentError, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.inter(
+                              color: AppColors.accentError,
+                              fontSize: 13,
                             ),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      const Divider(color: AppColors.borderDefault),
-                      const SizedBox(height: 12),
-                      NeonButton(
-                        label: 'Sign In with Google',
-                        icon: Icons.login,
-                        width: double.infinity,
-                        type: NeonButtonType.primary,
-                        onPressed: () {
-                          ref.read(authRepositoryProvider).signInWithGoogle();
-                        },
-                      ),
-                    ],
+                    ),
+                  ),
+                ],
+                if (isLiveMode) ...[
+                  NeonCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Sign In',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sign in with your Google account to access your friend group jar.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        NeonButton(
+                          label: _isLoading
+                              ? 'Signing In...'
+                              : 'Sign In with Google',
+                          icon: _isLoading ? null : Icons.account_circle,
+                          isLoading: _isLoading,
+                          width: double.infinity,
+                          type: NeonButtonType.primary,
+                          onPressed: _isLoading ? null : _handleGoogleSignIn,
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  NeonCard(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Local Demo Personas',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const StatusPill(
+                              label: 'Mock Mode',
+                              color: AppColors.accentInfo,
+                              icon: Icons.developer_mode,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Select a member profile to test the app offline:',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        for (final user in users) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: InkWell(
+                              onTap: () {
+                                ref
+                                    .read(authRepositoryProvider)
+                                    .signInWithDemo(user.id);
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.bgSurfaceElevated,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: user.isKeeper
+                                        ? AppColors.accentPrimary
+                                            .withValues(alpha: 0.4)
+                                        : AppColors.borderDefault,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    UserAvatar(user: user, size: 36),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            user.displayName,
+                                            style: GoogleFonts.inter(
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          Text(
+                                            user.roles
+                                                .map((r) =>
+                                                    r.name.toUpperCase())
+                                                .join(' • '),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              color: user.isKeeper
+                                                  ? AppColors.accentPrimary
+                                                  : AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (user.isPending)
+                                      const StatusPill(
+                                        label: 'Pending',
+                                        color: AppColors.accentWarning,
+                                        icon: Icons.hourglass_empty,
+                                      )
+                                    else
+                                      const Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 14,
+                                        color: AppColors.textMuted,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                TextButton.icon(
+                  onPressed: () {
+                    ref.read(isLiveModeProvider.notifier).state = !isLiveMode;
+                  },
+                  icon: Icon(
+                    isLiveMode
+                        ? Icons.bug_report_outlined
+                        : Icons.cloud_done_outlined,
+                    size: 16,
+                    color: AppColors.textMuted,
+                  ),
+                  label: Text(
+                    isLiveMode
+                        ? 'Switch to Local Demo Mode'
+                        : 'Switch to Live Firebase Mode',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ),
               ],

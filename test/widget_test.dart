@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swear_jar/main.dart';
+import 'package:swear_jar/presentation/providers/providers.dart';
 
 void main() {
-  testWidgets('Swear Jar App smoke and navigation test', (WidgetTester tester) async {
+  testWidgets('Swear Jar App unauthenticated shows AuthScreen with Google Sign-In',
+      (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: SwearJarApp(),
@@ -12,6 +14,25 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(find.text('SWEAR JAR 2.0'), findsOneWidget);
+    expect(find.text('Sign In with Google'), findsOneWidget);
+    expect(find.text('Switch to Local Demo Mode'), findsOneWidget);
+  });
+
+  testWidgets('Swear Jar App with mock provider navigates through all 5 tabs',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isLiveModeProvider.overrideWith((ref) => false),
+        ],
+        child: const SwearJarApp(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // In mock mode, user Fiona is logged in by default
     expect(find.text('YOUR JAR BALANCE'), findsOneWidget);
     expect(find.text('Report a Swear'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
@@ -35,6 +56,6 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('Your Profile'), findsOneWidget);
-    expect(find.text('QUICK DEMO SWITCHER'), findsOneWidget);
   });
 }
+

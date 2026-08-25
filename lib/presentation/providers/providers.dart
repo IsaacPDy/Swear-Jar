@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swear_jar/data/mock/mock_data_service.dart';
+import 'package:swear_jar/data/services/firebase_service.dart';
 import 'package:swear_jar/data/repositories/repositories.dart';
 import 'package:swear_jar/domain/models/models.dart';
+
+final isLiveModeProvider = StateProvider<bool>((ref) => true);
 
 final mockDataServiceProvider = Provider<MockDataService>((ref) {
   final service = MockDataService();
@@ -9,24 +12,45 @@ final mockDataServiceProvider = Provider<MockDataService>((ref) {
   return service;
 });
 
+final firebaseDataServiceProvider = Provider<FirebaseDataService>((ref) {
+  final service = FirebaseDataService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
 final authRepositoryProvider = Provider<IAuthRepository>((ref) {
-  return ref.watch(mockDataServiceProvider);
+  final isLive = ref.watch(isLiveModeProvider);
+  return isLive
+      ? ref.watch(firebaseDataServiceProvider)
+      : ref.watch(mockDataServiceProvider);
 });
 
 final reportRepositoryProvider = Provider<IReportRepository>((ref) {
-  return ref.watch(mockDataServiceProvider);
+  final isLive = ref.watch(isLiveModeProvider);
+  return isLive
+      ? ref.watch(firebaseDataServiceProvider)
+      : ref.watch(mockDataServiceProvider);
 });
 
 final ledgerRepositoryProvider = Provider<ILedgerRepository>((ref) {
-  return ref.watch(mockDataServiceProvider);
+  final isLive = ref.watch(isLiveModeProvider);
+  return isLive
+      ? ref.watch(firebaseDataServiceProvider)
+      : ref.watch(mockDataServiceProvider);
 });
 
 final userRepositoryProvider = Provider<IUserRepository>((ref) {
-  return ref.watch(mockDataServiceProvider);
+  final isLive = ref.watch(isLiveModeProvider);
+  return isLive
+      ? ref.watch(firebaseDataServiceProvider)
+      : ref.watch(mockDataServiceProvider);
 });
 
 final configRepositoryProvider = Provider<IConfigRepository>((ref) {
-  return ref.watch(mockDataServiceProvider);
+  final isLive = ref.watch(isLiveModeProvider);
+  return isLive
+      ? ref.watch(firebaseDataServiceProvider)
+      : ref.watch(mockDataServiceProvider);
 });
 
 final currentUserProvider = StreamProvider<AppUser?>((ref) {

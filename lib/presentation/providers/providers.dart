@@ -88,9 +88,16 @@ final pendingUsersProvider = Provider<List<AppUser>>((ref) {
 final activeKeeperProvider = Provider<AppUser?>((ref) {
   final config = ref.watch(systemConfigProvider).valueOrNull;
   final users = ref.watch(usersListProvider).valueOrNull ?? [];
-  if (config == null) return null;
+  if (users.isEmpty) return null;
+
+  if (config != null && config.activeKeeperId.isNotEmpty) {
+    try {
+      return users.firstWhere((u) => u.id == config.activeKeeperId);
+    } catch (_) {}
+  }
+
   try {
-    return users.firstWhere((u) => u.id == config.activeKeeperId);
+    return users.firstWhere((u) => u.isKeeper);
   } catch (_) {
     return null;
   }

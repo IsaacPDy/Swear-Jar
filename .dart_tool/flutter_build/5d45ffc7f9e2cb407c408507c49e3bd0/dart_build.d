@@ -1,1 +1,0 @@
- /Users/fiona/Documents/Apps/Swear\ Jar\ 2.0/.dart_tool/flutter_build/5d45ffc7f9e2cb407c408507c49e3bd0/dart_build_result.json:  /Users/fiona/Documents/Apps/Swear\ Jar\ 2.0/.dart_tool/package_config.json /Users/fiona/Documents/Apps/Swear\ Jar\ 2.0/pubspec.yaml /opt/homebrew/share/flutter/bin/cache/dart-sdk/version

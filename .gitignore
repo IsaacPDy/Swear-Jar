@@ -2,13 +2,24 @@
 .DS_Store
 Thumbs.db
 
+# Flutter & Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Firebase Cache
+.firebase/
+
 # Dependencies
 node_modules/
 .pnpm-store/
 
 # Build & Cache
 dist/
-build/
 .next/
 .expo/
 .turbo/

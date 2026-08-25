@@ -41,25 +41,14 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static FirebaseOptions get web {
-    String authDomain = 'swear-jar-5b12c.firebaseapp.com';
-    if (kIsWeb) {
-      final host = Uri.base.host.toLowerCase();
-      if (host.contains('swear-jar-5b12c.web.app')) {
-        authDomain = 'swear-jar-5b12c.web.app';
-      } else if (host.isNotEmpty && !host.contains('localhost') && !host.contains('127.0.0.1')) {
-        authDomain = host;
-      }
-    }
-    return FirebaseOptions(
-      apiKey: 'AIzaSyAoYYCTXJ5ls7qrMga4-LY-gDQqxDYJTLs',
-      appId: '1:526966419923:web:34317b6193dfe3a8aaff26',
-      messagingSenderId: '526966419923',
-      projectId: 'swear-jar-5b12c',
-      authDomain: authDomain,
-      storageBucket: 'swear-jar-5b12c.firebasestorage.app',
-    );
-  }
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAoYYCTXJ5ls7qrMga4-LY-gDQqxDYJTLs',
+    appId: '1:526966419923:web:34317b6193dfe3a8aaff26',
+    messagingSenderId: '526966419923',
+    projectId: 'swear-jar-5b12c',
+    authDomain: 'swear-jar-5b12c.firebaseapp.com',
+    storageBucket: 'swear-jar-5b12c.firebasestorage.app',
+  );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAoYYCTXJ5ls7qrMga4-LY-gDQqxDYJTLs',

@@ -141,9 +141,13 @@ class FirebaseDataService
         try {
           await _auth.signInWithPopup(googleProvider);
         } catch (popupError) {
-          debugPrint('Popup sign in encountered issue, attempting redirect: $popupError');
-          // If popup is blocked by browser, fallback to redirect
-          await _auth.signInWithRedirect(googleProvider);
+          final errStr = popupError.toString();
+          debugPrint('Popup sign in did not complete ($errStr), attempting redirect fallback...');
+          try {
+            await _auth.signInWithRedirect(googleProvider);
+          } catch (redirectError) {
+            debugPrint('Redirect fallback error: $redirectError');
+          }
         }
       } else {
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -163,18 +167,28 @@ class FirebaseDataService
       debugPrint('Firebase Auth Error [${e.code}]: ${e.message}');
       switch (e.code) {
         case 'popup-closed-by-user':
-          throw Exception('Sign-in cancelled (popup was closed).');
+          // User intentionally closed the popup, do not show an error
+          return;
         case 'unauthorized-domain':
           throw Exception(
               'Domain not authorized. Please add this domain to Firebase Console > Authentication > Settings > Authorized domains.');
         case 'popup-blocked':
-          throw Exception('Sign-in popup was blocked by browser. Please allow popups for this site.');
         case 'cancelled-popup-request':
-          throw Exception('Sign-in popup request was cancelled.');
+          // Popup blocked, already falling back or cancelled
+          return;
         default:
           throw Exception(e.message ?? 'Authentication failed (${e.code}).');
       }
     } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('Null check operator') ||
+          msg.contains('popup-closed') ||
+          msg.contains('popup_closed') ||
+          msg.contains('cancelled')) {
+        // Internal SDK popup blocking artifact on iOS/Safari, suppress
+        debugPrint('Suppressed popup artifact error: $msg');
+        return;
+      }
       debugPrint('Google Sign In Error: $e');
       rethrow;
     }

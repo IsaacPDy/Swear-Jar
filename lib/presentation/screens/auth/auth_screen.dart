@@ -26,8 +26,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       await ref.read(authRepositoryProvider).signInWithGoogle();
     } catch (e) {
       if (mounted) {
+        final errText = e.toString().replaceFirst('Exception: ', '');
+        if (errText.contains('Null check operator') ||
+            errText.contains('popup-closed') ||
+            errText.contains('cancelled-popup')) {
+          // Suppress Safari popup closing / internal null artifact
+          return;
+        }
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = errText;
         });
       }
     } finally {

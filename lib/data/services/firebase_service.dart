@@ -195,6 +195,9 @@ class FirebaseDataService
 
   @override
   Stream<List<AppUser>> watchUsers() {
+    if (Firebase.apps.isEmpty) {
+      return Stream.value(<AppUser>[]);
+    }
     return _firestore.collection('users').snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => AppUser.fromMap(doc.data(), id: doc.id))
@@ -295,6 +298,9 @@ class FirebaseDataService
 
   @override
   Stream<List<SwearReport>> watchReports() {
+    if (Firebase.apps.isEmpty) {
+      return Stream.value(<SwearReport>[]);
+    }
     return _firestore
         .collection('reports')
         .snapshots()
@@ -416,6 +422,9 @@ class FirebaseDataService
 
   @override
   Stream<List<DebtObligation>> watchDebts() {
+    if (Firebase.apps.isEmpty) {
+      return Stream.value(<DebtObligation>[]);
+    }
     return _firestore
         .collection('debts')
         .snapshots()
@@ -495,6 +504,17 @@ class FirebaseDataService
 
   @override
   Stream<SystemConfig> watchConfig() {
+    if (Firebase.apps.isEmpty) {
+      return Stream.value(
+        SystemConfig(
+          activeKeeperId: '',
+          currentRatePerSwear: 50.0,
+          groupName: 'Our Friend Group',
+          totalSwearsAllTime: 0,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
     return _firestore.collection('config').doc('system').snapshots().map((snapshot) {
       if (!snapshot.exists || snapshot.data() == null) {
         return SystemConfig(

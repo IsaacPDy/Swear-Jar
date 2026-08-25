@@ -38,6 +38,12 @@ class FirebaseDataService
       debugPrint('Firebase is not initialized. Skipping auth listener.');
       return;
     }
+    if (kIsWeb) {
+      _auth.getRedirectResult().catchError((e) {
+        debugPrint('Redirect auth check completed/error: $e');
+        return null;
+      });
+    }
     _auth.authStateChanges().listen((User? fbUser) async {
       await _userDocSubscription?.cancel();
       if (fbUser == null) {

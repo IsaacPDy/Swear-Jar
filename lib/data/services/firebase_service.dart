@@ -38,12 +38,6 @@ class FirebaseDataService
       debugPrint('Firebase is not initialized. Skipping auth listener.');
       return;
     }
-    if (kIsWeb) {
-      _auth.getRedirectResult().catchError((e) {
-        debugPrint('Redirect auth check completed/error: $e');
-        return null;
-      });
-    }
     _auth.authStateChanges().listen((User? fbUser) async {
       await _userDocSubscription?.cancel();
       if (fbUser == null) {
@@ -254,7 +248,7 @@ class FirebaseDataService
     final doc = await _firestore.collection('users').doc(userId).get();
     if (!doc.exists) return;
 
-    final user = AppUser.fromMap(doc.data()!, id: doc.id);
+    final user = AppUser.fromMap(doc.data() ?? {}, id: doc.id);
     final updatedRoles = List<UserRole>.from(user.roles);
     if (makeAdmin && !updatedRoles.contains(UserRole.admin)) {
       updatedRoles.add(UserRole.admin);
@@ -280,7 +274,7 @@ class FirebaseDataService
     // 1. Update old keeper roles
     final oldDoc = await _firestore.collection('users').doc(oldKeeperId).get();
     if (oldDoc.exists) {
-      final oldUser = AppUser.fromMap(oldDoc.data()!, id: oldDoc.id);
+      final oldUser = AppUser.fromMap(oldDoc.data() ?? {}, id: oldDoc.id);
       final oldRoles = List<UserRole>.from(oldUser.roles)..remove(UserRole.keeper);
       batch.update(_firestore.collection('users').doc(oldKeeperId), {
         'roles': oldRoles.map((r) => r.toStr()).toList(),
@@ -291,7 +285,7 @@ class FirebaseDataService
     // 2. Update new keeper roles
     final newDoc = await _firestore.collection('users').doc(newKeeperId).get();
     if (newDoc.exists) {
-      final newUser = AppUser.fromMap(newDoc.data()!, id: newDoc.id);
+      final newUser = AppUser.fromMap(newDoc.data() ?? {}, id: newDoc.id);
       final newRoles = List<UserRole>.from(newUser.roles);
       if (!newRoles.contains(UserRole.keeper)) {
         newRoles.add(UserRole.keeper);
@@ -553,7 +547,7 @@ class FirebaseDataService
           updatedAt: DateTime.now(),
         );
       }
-      return SystemConfig.fromMap(snapshot.data()!);
+      return SystemConfig.fromMap(snapshot.data() ?? {});
     });
   }
 

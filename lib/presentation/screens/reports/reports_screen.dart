@@ -241,7 +241,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                                       ),
                                     ),
                                   ],
-                                  if (report.isPending && isKeeperOrAdmin) ...[
+                                  if (report.isPending && isKeeperOrAdmin && currentUser != null) ...[
                                     const SizedBox(height: 14),
                                     Row(
                                       children: [
@@ -250,7 +250,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                                             label: 'Reject',
                                             type: NeonButtonType.danger,
                                             icon: Icons.close,
-                                            onPressed: () => _confirmRejectDialog(context, report, currentUser!),
+                                            onPressed: () => _confirmRejectDialog(context, report, currentUser),
                                           ),
                                         ),
                                         const SizedBox(width: 10),
@@ -259,7 +259,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                                             label: 'Confirm Swear',
                                             type: NeonButtonType.primary,
                                             icon: Icons.check,
-                                            onPressed: () => _confirmApproveDialog(context, report, currentUser!, keeper, reporter),
+                                            onPressed: () => _confirmApproveDialog(context, report, currentUser, keeper, reporter),
                                           ),
                                         ),
                                       ],

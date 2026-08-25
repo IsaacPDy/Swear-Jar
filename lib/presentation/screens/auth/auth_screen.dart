@@ -276,7 +276,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            _errorMessage!,
+                            _errorMessage ?? '',
                             style: GoogleFonts.inter(
                               color: AppColors.accentError,
                               fontSize: 13,

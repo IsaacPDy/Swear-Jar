@@ -48,14 +48,18 @@ class FirebaseDataService
 
       final docRef = _firestore.collection('users').doc(fbUser.uid);
       _userDocSubscription = docRef.snapshots().listen((snapshot) async {
-        if (!snapshot.exists) {
-          // If the document doesn't exist yet, we bootstrap or create it
-          await _bootstrapUser(fbUser);
-        } else {
-          final data = snapshot.data() ?? {};
-          final user = AppUser.fromMap(data, id: snapshot.id);
-          _cachedCurrentUser = user;
-          _userStreamController.add(user);
+        try {
+          if (!snapshot.exists || snapshot.data() == null) {
+            // If the document doesn't exist yet, we bootstrap or create it
+            await _bootstrapUser(fbUser);
+          } else {
+            final data = snapshot.data() ?? {};
+            final user = AppUser.fromMap(data, id: snapshot.id);
+            _cachedCurrentUser = user;
+            _userStreamController.add(user);
+          }
+        } catch (e, stack) {
+          debugPrint('Error handling user snapshot: $e\n$stack');
         }
       }, onError: (e) {
         debugPrint('Error listening to user document: $e');
@@ -64,46 +68,57 @@ class FirebaseDataService
   }
 
   Future<void> _bootstrapUser(User fbUser) async {
-    final usersSnapshot = await _firestore.collection('users').limit(2).get();
-    final isFirstUser = usersSnapshot.docs.isEmpty;
+    try {
+      final usersSnapshot = await _firestore.collection('users').limit(2).get();
+      final isFirstUser = usersSnapshot.docs.isEmpty;
 
-    final now = DateTime.now();
-    final roles = isFirstUser
-        ? [UserRole.member, UserRole.admin, UserRole.keeper]
-        : [UserRole.member];
-    final status = isFirstUser ? UserStatus.approved : UserStatus.pending;
+      final now = DateTime.now();
+      final roles = isFirstUser
+          ? [UserRole.member, UserRole.admin, UserRole.keeper]
+          : [UserRole.member];
+      final status = isFirstUser ? UserStatus.approved : UserStatus.pending;
 
-    final newUser = AppUser(
-      id: fbUser.uid,
-      email: fbUser.email ?? '',
-      displayName: fbUser.displayName?.isNotEmpty == true
-          ? fbUser.displayName!
-          : (fbUser.email?.split('@').first ?? 'User'),
-      photoUrl: fbUser.photoURL,
-      gcashNumber: null,
-      roles: roles,
-      status: status,
-      createdAt: now,
-      updatedAt: now,
-    );
+      final String displayName;
+      if (fbUser.displayName != null && fbUser.displayName!.trim().isNotEmpty) {
+        displayName = fbUser.displayName!.trim();
+      } else if (fbUser.email != null && fbUser.email!.contains('@')) {
+        displayName = fbUser.email!.split('@').first;
+      } else {
+        displayName = 'Member';
+      }
 
-    final batch = _firestore.batch();
-    final userRef = _firestore.collection('users').doc(fbUser.uid);
-    batch.set(userRef, newUser.toMap());
-
-    if (isFirstUser) {
-      final configRef = _firestore.collection('config').doc('system');
-      final initialConfig = SystemConfig(
-        activeKeeperId: fbUser.uid,
-        currentRatePerSwear: 50.0,
-        groupName: 'Our Friend Group',
-        totalSwearsAllTime: 0,
+      final newUser = AppUser(
+        id: fbUser.uid,
+        email: fbUser.email ?? '',
+        displayName: displayName,
+        photoUrl: fbUser.photoURL,
+        gcashNumber: null,
+        roles: roles,
+        status: status,
+        createdAt: now,
         updatedAt: now,
       );
-      batch.set(configRef, initialConfig.toMap(), SetOptions(merge: true));
-    }
 
-    await batch.commit();
+      final batch = _firestore.batch();
+      final userRef = _firestore.collection('users').doc(fbUser.uid);
+      batch.set(userRef, newUser.toMap(), SetOptions(merge: true));
+
+      if (isFirstUser) {
+        final configRef = _firestore.collection('config').doc('system');
+        final initialConfig = SystemConfig(
+          activeKeeperId: fbUser.uid,
+          currentRatePerSwear: 50.0,
+          groupName: 'Our Friend Group',
+          totalSwearsAllTime: 0,
+          updatedAt: now,
+        );
+        batch.set(configRef, initialConfig.toMap(), SetOptions(merge: true));
+      }
+
+      await batch.commit();
+    } catch (e, stack) {
+      debugPrint('Error bootstrapping user: $e\n$stack');
+    }
   }
 
   @override
@@ -122,7 +137,14 @@ class FirebaseDataService
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
         googleProvider.addScope('email');
         googleProvider.addScope('profile');
-        await _auth.signInWithPopup(googleProvider);
+        googleProvider.setCustomParameters({'prompt': 'select_account'});
+        try {
+          await _auth.signInWithPopup(googleProvider);
+        } catch (popupError) {
+          debugPrint('Popup sign in encountered issue, attempting redirect: $popupError');
+          // If popup is blocked by browser, fallback to redirect
+          await _auth.signInWithRedirect(googleProvider);
+        }
       } else {
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         if (googleUser == null) return; // User cancelled

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swear_jar/main.dart';
@@ -57,7 +58,9 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('Your Profile'), findsOneWidget);
+    expect(find.text('GROUP MEMBERS'), findsOneWidget);
     expect(find.text('QUICK DEMO SWITCHER'), findsNothing);
+    expect(find.text('Switch'), findsNothing);
   });
 
   testWidgets('Swear Jar App shows Firebase warning when init error is provided',
@@ -77,5 +80,55 @@ void main() {
     expect(find.text('Firebase Setup Warning'), findsOneWidget);
     expect(find.text('Firebase could not connect to project'), findsOneWidget);
   });
+
+  testWidgets('Swear Jar App adapts between phone layout and laptop computer layout',
+      (WidgetTester tester) async {
+    // 1. Test Phone sizing (390x844) -> BottomNavigationBar present
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isLiveModeProvider.overrideWith((ref) => false),
+        ],
+        child: const SwearJarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomNavigationBar), findsOneWidget);
+    expect(find.text('YOUR JAR BALANCE'), findsOneWidget);
+
+    // 2. Test Laptop / Computer sizing (1280x800) -> Computer sidebar instead of BottomNavigationBar
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomNavigationBar), findsNothing);
+    expect(find.text('SWEAR JAR'), findsOneWidget);
+    expect(find.text('YOUR JAR BALANCE'), findsOneWidget);
+    expect(find.text('YOUR ACTIVE OBLIGATIONS'), findsOneWidget);
+
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+    expect(find.text('Report History & Review'), findsOneWidget);
+
+    await tester.tap(find.text('Report'));
+    await tester.pumpAndSettle();
+    expect(find.text('WHO COMMITTED THE SWEAR?'), findsOneWidget);
+
+    await tester.tap(find.text('Jar'));
+    await tester.pumpAndSettle();
+    expect(find.text('TOTAL GROUP OUTSTANDING'), findsOneWidget);
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your Profile'), findsOneWidget);
+  });
 }
+
 

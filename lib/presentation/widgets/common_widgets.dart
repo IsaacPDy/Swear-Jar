@@ -26,34 +26,47 @@ class NeonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(12);
+    final effectiveBorderColor = borderColor ??
+        (hasGlow
+            ? AppColors.accentPrimary.withValues(alpha: 0.45)
+            : AppColors.borderDefault);
+
     Widget content = Container(
       margin: margin,
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: backgroundColor ?? AppColors.bgSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: radius,
         border: Border.all(
-          color: borderColor ?? (hasGlow ? AppColors.accentPrimary.withValues(alpha: 0.5) : AppColors.borderDefault),
-          width: hasGlow ? 1.5 : 1.0,
+          color: effectiveBorderColor,
+          width: 1.0,
         ),
-        boxShadow: hasGlow
-            ? [
-                BoxShadow(
-                  color: AppColors.accentGlow.withValues(alpha: 0.25),
-                  blurRadius: 16,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+          if (hasGlow)
+            BoxShadow(
+              color: AppColors.accentGlow.withValues(alpha: 0.18),
+              blurRadius: 18,
+              spreadRadius: 0,
+            ),
+        ],
       ),
       child: child,
     );
 
     if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: content,
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: content,
+        ),
       );
     }
     return content;
@@ -91,24 +104,24 @@ class NeonButton extends StatelessWidget {
       case NeonButtonType.primary:
         bg = AppColors.accentPrimary;
         fg = Colors.white;
-        border = null;
-        shadows = const [
+        border = AppColors.accentPrimary.withValues(alpha: 0.8);
+        shadows = [
           BoxShadow(
-            color: AppColors.accentGlow,
-            blurRadius: 12,
-            offset: Offset(0, 4),
+            color: AppColors.accentPrimary.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ];
         break;
       case NeonButtonType.mint:
         bg = AppColors.accentSuccess;
-        fg = Colors.black;
+        fg = const Color(0xFF052E16);
         border = null;
         shadows = [
           BoxShadow(
-            color: AppColors.accentSuccess.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: AppColors.accentSuccess.withValues(alpha: 0.22),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ];
         break;
@@ -119,9 +132,9 @@ class NeonButton extends StatelessWidget {
         shadows = null;
         break;
       case NeonButtonType.danger:
-        bg = AppColors.accentError.withValues(alpha: 0.15);
+        bg = AppColors.accentError.withValues(alpha: 0.12);
         fg = AppColors.accentError;
-        border = AppColors.accentError.withValues(alpha: 0.4);
+        border = AppColors.accentError.withValues(alpha: 0.35);
         shadows = null;
         break;
       case NeonButtonType.outline:
@@ -137,47 +150,53 @@ class NeonButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (isLoading)
-          const SizedBox(
-            width: 18,
-            height: 18,
+          SizedBox(
+            width: 16,
+            height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor: AlwaysStoppedAnimation<Color>(fg),
             ),
           )
         else ...[
           if (icon != null) ...[
-            Icon(icon, size: 18, color: fg),
+            Icon(icon, size: 17, color: fg),
             const SizedBox(width: 8),
           ],
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: fg,
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                color: fg,
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+                letterSpacing: -0.1,
+              ),
             ),
           ),
         ],
       ],
     );
 
+    final radius = BorderRadius.circular(10);
+
     return Container(
       width: width,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: shadows,
+        borderRadius: radius,
+        boxShadow: onPressed != null ? shadows : null,
       ),
       child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
+        color: onPressed == null ? bg.withValues(alpha: 0.5) : bg,
+        borderRadius: radius,
         child: InkWell(
           onTap: isLoading ? null : onPressed,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: radius,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: radius,
               border: border != null ? Border.all(color: border) : null,
             ),
             alignment: Alignment.center,
@@ -257,23 +276,24 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.28), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 5),
           Text(
             label,
             style: GoogleFonts.inter(
               color: color,
-              fontSize: 12,
+              fontSize: 11.5,
               fontWeight: FontWeight.w600,
+              letterSpacing: -0.1,
             ),
           ),
         ],
@@ -310,6 +330,8 @@ class CurrencyText extends StatelessWidget {
         color: color ?? AppColors.textPrimary,
         fontSize: fontSize,
         fontWeight: fontWeight,
+        letterSpacing: -0.4,
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }
@@ -330,10 +352,16 @@ class UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initials = user.displayName.isNotEmpty
-        ? user.displayName.split(' ').map((s) => s.isNotEmpty ? s[0] : '').take(2).join('').toUpperCase()
+        ? user.displayName
+            .split(' ')
+            .map((s) => s.isNotEmpty ? s[0] : '')
+            .take(2)
+            .join('')
+            .toUpperCase()
         : 'U';
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Container(
           width: size,
@@ -342,33 +370,37 @@ class UserAvatar extends StatelessWidget {
             shape: BoxShape.circle,
             color: AppColors.bgSurfaceElevated,
             border: Border.all(
-              color: user.isKeeper ? AppColors.accentPrimary : AppColors.borderDefault,
-              width: user.isKeeper ? 2 : 1,
+              color: user.isKeeper
+                  ? AppColors.accentPrimary.withValues(alpha: 0.7)
+                  : AppColors.borderDefault,
+              width: user.isKeeper ? 1.5 : 1,
             ),
           ),
           alignment: Alignment.center,
           child: Text(
             initials,
-            style: GoogleFonts.outfit(
+            style: GoogleFonts.inter(
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: size * 0.4,
+              fontWeight: FontWeight.w600,
+              fontSize: size * 0.36,
+              letterSpacing: -0.3,
             ),
           ),
         ),
         if (showBadge && user.isKeeper)
           Positioned(
-            right: 0,
-            bottom: 0,
+            right: -1,
+            bottom: -1,
             child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
                 color: AppColors.accentPrimary,
                 shape: BoxShape.circle,
+                border: Border.all(color: AppColors.bgBase, width: 1.5),
               ),
               child: const Icon(
                 Icons.shield,
-                size: 10,
+                size: 9,
                 color: Colors.white,
               ),
             ),
@@ -377,3 +409,4 @@ class UserAvatar extends StatelessWidget {
     );
   }
 }
+

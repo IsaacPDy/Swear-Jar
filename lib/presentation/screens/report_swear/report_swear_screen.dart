@@ -38,7 +38,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       TweenSequenceItem(tween: Tween(begin: 0.08, end: -0.05), weight: 2),
       TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
       TweenSequenceItem(tween: Tween(begin: 0.05, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut));
+    ]).animate(
+        CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut));
   }
 
   @override
@@ -54,298 +55,428 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final config = ref.watch(systemConfigProvider).valueOrNull;
     final keeper = ref.watch(activeKeeperProvider);
+    final isDesktop = AppBreakpoints.isDesktop(context);
 
     final currentRate = config?.currentRatePerSwear ?? 50.0;
     final totalConsequence = _swearCount * currentRate;
 
     if (_selectedAccusedId == null && users.isNotEmpty) {
-      final other = users.firstWhere((u) => u.id != currentUser?.id, orElse: () => users.first);
+      final other = users.firstWhere((u) => u.id != currentUser?.id,
+          orElse: () => users.first);
       _selectedAccusedId = other.id;
     }
 
     final isKeeperSelected = _selectedAccusedId == keeper?.id;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Report a Swear', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+    final jarEmblem = Center(
+      child: RotationTransition(
+        turns: _shakeAnimation,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: AppColors.accentPrimary.withValues(alpha: 0.35),
+              width: 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.accentGlow,
+                blurRadius: 16,
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 40,
+            color: AppColors.accentPrimary,
+          ),
+        ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    );
+
+    final accusedSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WHO COMMITTED THE SWEAR?',
+          style: GoogleFonts.inter(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (isDesktop)
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final user in users)
+                _buildUserSelectorTile(user, currentUser, isDesktop: true),
+            ],
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Center(
-                  child: RotationTransition(
-                    turns: _shakeAnimation,
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSurfaceElevated,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.accentPrimary.withValues(alpha: 0.4),
-                          width: 2,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: AppColors.accentGlow,
-                            blurRadius: 20,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.savings_rounded,
-                        size: 48,
-                        color: AppColors.accentPrimary,
-                      ),
+                for (final user in users)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: _buildUserSelectorTile(user, currentUser,
+                        isDesktop: false),
+                  ),
+              ],
+            ),
+          ),
+        if (isKeeperSelected) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.accentPrimary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: AppColors.accentPrimary.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.swap_horiz_rounded,
+                    color: AppColors.accentPrimary, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'You\'re reporting the Keeper! If confirmed, unpaid Keeper debts transfer to you and your debt to Keeper is forgiven!',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'WHO COMMITTED THE SWEAR?',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final user in users) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(right: 12.0),
-                          child: InkWell(
-                            onTap: () {
-                              setState(() => _selectedAccusedId = user.id);
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: _selectedAccusedId == user.id
-                                    ? AppColors.accentPrimary.withValues(alpha: 0.18)
-                                    : AppColors.bgSurface,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: _selectedAccusedId == user.id
-                                      ? AppColors.accentPrimary
-                                      : AppColors.borderDefault,
-                                  width: _selectedAccusedId == user.id ? 2 : 1,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  UserAvatar(user: user, size: 48),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    user.id == currentUser?.id ? 'Myself' : user.displayName.split(' ').first,
-                                    style: GoogleFonts.inter(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: _selectedAccusedId == user.id
-                                          ? AppColors.textPrimary
-                                          : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  if (user.isKeeper)
-                                    Text(
-                                      '👑 Keeper',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        color: AppColors.accentPrimary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (isKeeperSelected) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentPrimary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.accentPrimary.withValues(alpha: 0.4)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.flash_on, color: AppColors.accentPrimary, size: 20),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'You\'re reporting the Keeper! If confirmed, unpaid Keeper debts transfer to you and your debt to Keeper is forgiven!',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Text(
-                  'SWEAR COUNT (1–99)',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                NeonCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            onPressed: _swearCount > 1 ? () => setState(() => _swearCount--) : null,
-                            icon: const Icon(Icons.remove_circle_outline, size: 32),
-                            color: AppColors.accentPrimary,
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgSurfaceElevated,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: AppColors.borderDefault),
-                            ),
-                            child: Text(
-                              '$_swearCount',
-                              style: GoogleFonts.outfit(
-                                fontSize: 36,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _swearCount < 99 ? () => setState(() => _swearCount++) : null,
-                            icon: const Icon(Icons.add_circle_outline, size: 32),
-                            color: AppColors.accentPrimary,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildQuickButton('+1', () => _setCountOffset(1)),
-                          const SizedBox(width: 8),
-                          _buildQuickButton('+2', () => _setCountOffset(2)),
-                          const SizedBox(width: 8),
-                          _buildQuickButton('+5', () => _setCountOffset(5)),
-                          const SizedBox(width: 8),
-                          _buildQuickButton('Max (99)', () => setState(() => _swearCount = 99)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'NOTE / CONTEXT (OPTIONAL)',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _noteController,
-                  maxLength: 120,
-                  decoration: InputDecoration(
-                    hintText: 'e.g., Screamed during Mario Kart tournament...',
-                    hintStyle: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 14),
-                    filled: true,
-                    fillColor: AppColors.bgSurface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.borderDefault),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.accentPrimary),
-                    ),
-                  ),
-                  style: GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 14),
-                ),
-                const SizedBox(height: 20),
-                NeonCard(
-                  backgroundColor: AppColors.bgSurfaceElevated,
-                  borderColor: AppColors.accentPrimary.withValues(alpha: 0.3),
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'CONSEQUENCE RATE',
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted),
-                          ),
-                          Text(
-                            '₱${currentRate.toStringAsFixed(0)} / swear',
-                            style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'TOTAL OBLIGATION',
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentPrimary),
-                          ),
-                          CurrencyText(
-                            amount: totalConsequence,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.accentPrimary,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                NeonButton(
-                  label: 'Submit Swear to Jar',
-                  icon: Icons.send_rounded,
-                  type: NeonButtonType.primary,
-                  width: double.infinity,
-                  isLoading: _isSubmitting,
-                  onPressed: _selectedAccusedId == null
-                      ? null
-                      : () => _handleSubmit(currentUser, currentRate),
                 ),
               ],
             ),
           ),
+        ],
+      ],
+    );
+
+    final swearCountSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SWEAR COUNT (1–99)',
+          style: GoogleFonts.inter(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        NeonCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: _swearCount > 1
+                        ? () => setState(() => _swearCount--)
+                        : null,
+                    icon: const Icon(Icons.remove_circle_outline, size: 30),
+                    color: AppColors.accentPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 88),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSurfaceElevated,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.borderDefault),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$_swearCount',
+                      style: GoogleFonts.outfit(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _swearCount < 99
+                        ? () => setState(() => _swearCount++)
+                        : null,
+                    icon: const Icon(Icons.add_circle_outline, size: 30),
+                    color: AppColors.accentPrimary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildQuickButton('+1', () => _setCountOffset(1)),
+                  _buildQuickButton('+2', () => _setCountOffset(2)),
+                  _buildQuickButton('+5', () => _setCountOffset(5)),
+                  _buildQuickButton(
+                      'Max (99)', () => setState(() => _swearCount = 99)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final noteSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'NOTE / CONTEXT (OPTIONAL)',
+          style: GoogleFonts.inter(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _noteController,
+          maxLength: 120,
+          maxLines: isDesktop ? 3 : 1,
+          decoration: InputDecoration(
+            hintText: 'e.g., Screamed during Mario Kart tournament...',
+            hintStyle:
+                GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13.5),
+            filled: true,
+            fillColor: AppColors.bgSurface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.borderDefault),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.borderDefault),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.accentPrimary),
+            ),
+          ),
+          style:
+              GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 13.5),
+        ),
+      ],
+    );
+
+    final summaryCard = NeonCard(
+      backgroundColor: AppColors.bgSurface,
+      borderColor: AppColors.accentPrimary.withValues(alpha: 0.3),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CONSEQUENCE RATE',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '₱${currentRate.toStringAsFixed(0)} / swear',
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'TOTAL OBLIGATION',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.6,
+                  color: AppColors.accentPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              CurrencyText(
+                amount: totalConsequence,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final submitButton = NeonButton(
+      label: 'Submit Swear to Jar',
+      icon: Icons.send_rounded,
+      type: NeonButtonType.primary,
+      width: double.infinity,
+      isLoading: _isSubmitting,
+      onPressed: _selectedAccusedId == null
+          ? null
+          : () => _handleSubmit(currentUser, currentRate),
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Report a Swear',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 18),
+        ),
+      ),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isDesktop ? 1080 : 600),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 32 : 16,
+              vertical: isDesktop ? 24 : 16,
+            ),
+            child: isDesktop
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            accusedSection,
+                            const SizedBox(height: 24),
+                            noteSection,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 28),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            jarEmblem,
+                            const SizedBox(height: 20),
+                            swearCountSection,
+                            const SizedBox(height: 16),
+                            summaryCard,
+                            const SizedBox(height: 20),
+                            submitButton,
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      jarEmblem,
+                      const SizedBox(height: 24),
+                      accusedSection,
+                      const SizedBox(height: 24),
+                      swearCountSection,
+                      const SizedBox(height: 24),
+                      noteSection,
+                      const SizedBox(height: 20),
+                      summaryCard,
+                      const SizedBox(height: 24),
+                      submitButton,
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserSelectorTile(
+    AppUser user,
+    AppUser? currentUser, {
+    required bool isDesktop,
+  }) {
+    final isSelected = _selectedAccusedId == user.id;
+
+    return InkWell(
+      onTap: () => setState(() => _selectedAccusedId = user.id),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: isDesktop ? 124 : null,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.accentPrimary.withValues(alpha: 0.14)
+              : AppColors.bgSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.accentPrimary : AppColors.borderDefault,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            UserAvatar(user: user, size: 44),
+            const SizedBox(height: 8),
+            Text(
+              user.id == currentUser?.id
+                  ? 'Myself'
+                  : user.displayName.split(' ').first,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isSelected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              user.isKeeper ? 'Keeper' : 'Member',
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                color:
+                    user.isKeeper ? AppColors.accentPrimary : AppColors.textMuted,
+                fontWeight: user.isKeeper ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -354,12 +485,12 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
   Widget _buildQuickButton(String label, VoidCallback onPressed) {
     return InkWell(
       onTap: onPressed,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.bgSurface,
-          borderRadius: BorderRadius.circular(8),
+          color: AppColors.bgSurfaceElevated,
+          borderRadius: BorderRadius.circular(6),
           border: Border.all(color: AppColors.borderDefault),
         ),
         child: Text(
@@ -411,3 +542,4 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     }
   }
 }
+

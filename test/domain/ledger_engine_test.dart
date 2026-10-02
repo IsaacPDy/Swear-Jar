@@ -691,6 +691,67 @@ void main() {
       expect(rejectedSummary.wordStats.first.word, 'Damn');
       expect(rejectedSummary.wordStats.first.count, 5);
     });
+
+    test('buildPaymentHistory and updatePaymentHistoryItem edit and delete payment history entries accurately', () {
+      final debt = DebtObligation(
+        id: 'debt_edit_1',
+        reportId: 'rep_edit_1',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 100.0,
+        remainingBalance: 60.0,
+        status: DebtStatus.active,
+        payments: [
+          PaymentRecord(
+            id: 'pay_edit_1',
+            debtId: 'debt_edit_1',
+            amount: 40.0,
+            recordedBy: keeperId,
+            recordedAt: DateTime(2026, 2, 10),
+            note: 'Initial GCash',
+          ),
+        ],
+        createdAt: DateTime(2026, 2, 1),
+      );
+
+      final history = LedgerEngine.buildPaymentHistory(allDebts: [debt]);
+      expect(history.length, 1);
+      expect(history.first.amount, 40.0);
+      expect(history.first.paymentIds, ['pay_edit_1']);
+
+      // Edit payment from 40 to 75 on a new date
+      final editedDate = DateTime(2026, 2, 12);
+      final afterEdit = LedgerEngine.updatePaymentHistoryItem(
+        item: history.first,
+        allDebts: [debt],
+        newAmount: 75.0,
+        newDate: editedDate,
+        newNote: 'Updated GCash',
+        updatedBy: keeperId,
+      );
+
+      expect(afterEdit.length, 1);
+      expect(afterEdit.first.remainingBalance, 25.0);
+      expect(afterEdit.first.collectedAmount, 75.0);
+      expect(afterEdit.first.payments.single.recordedAt, editedDate);
+      expect(afterEdit.first.payments.single.note, 'Updated GCash');
+
+      // Delete the payment (newAmount: 0)
+      final historyAfterEdit =
+          LedgerEngine.buildPaymentHistory(allDebts: afterEdit);
+      final afterDelete = LedgerEngine.updatePaymentHistoryItem(
+        item: historyAfterEdit.first,
+        allDebts: afterEdit,
+        newAmount: 0.0,
+        newDate: editedDate,
+        newNote: null,
+        updatedBy: keeperId,
+      );
+
+      expect(afterDelete.first.remainingBalance, 100.0);
+      expect(afterDelete.first.payments, isEmpty);
+      expect(afterDelete.first.status, DebtStatus.active);
+    });
   });
 }
 

@@ -57,7 +57,8 @@ void main() {
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
     expect(find.text('TO BE RECEIVED'), findsOneWidget);
-    expect(find.text('COLLECTED ALREADY'), findsOneWidget);
+    expect(find.text('COLLECTED ALREADY'), findsNothing);
+    expect(find.text('Collection Progress'), findsNothing);
     expect(find.text('PAYMENT HISTORY'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
@@ -130,7 +131,8 @@ void main() {
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
     expect(find.text('TO BE RECEIVED'), findsOneWidget);
-    expect(find.text('COLLECTED ALREADY'), findsOneWidget);
+    expect(find.text('COLLECTED ALREADY'), findsNothing);
+    expect(find.text('PAYMENT HISTORY'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -350,7 +352,7 @@ void main() {
   });
 
   testWidgets(
-      'Keeper can record a partial payment in Group Jar & Ledger and see To Be Received and Collected Already update',
+      'Keeper can record a partial payment with payment date and edit payment history in Group Jar & Ledger',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -382,25 +384,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Group Jar & Ledger'), findsOneWidget);
-    expect(find.text('AMOUNT EACH PERSON SHOULD PAY (TO BE RECEIVED)'), findsOneWidget);
+    expect(find.text('AMOUNT EACH PERSON SHOULD PAY (TO BE RECEIVED)'), findsNothing);
+    expect(find.text('COLLECTED ALREADY'), findsNothing);
+    expect(find.text('Collection Progress'), findsNothing);
     expect(find.text('PAYMENT HISTORY'), findsOneWidget);
 
-    // Every approved member (Fiona, Sam, Leo) is shown in the person boxes with their To Be Received
+    // Every approved member (Fiona, Sam, Leo) is shown in the person boxes with Record Payment button below each card
     expect(find.text('Fiona'), findsWidgets);
     expect(find.text('Sam'), findsWidgets);
     expect(find.text('Leo'), findsWidgets);
+    expect(find.text('Record Payment'), findsNWidgets(3));
 
-    // Initially: Sam owes 50 (with 50 already collected), Fiona owes 50 (0 collected)
-    // Total To Be Received = 100, Total Collected Already = 50 -> ₱50 / ₱150 (33%)
-    expect(find.text('₱50 / ₱150 (33%)'), findsOneWidget);
+    // Initially +₱50 is shown in PAYMENT HISTORY
     expect(find.text('+₱50'), findsOneWidget);
 
-    // Tap Record Payment (Full or Partial) button in summary card
-    await tester.tap(find.text('Record Payment (Full or Partial)'));
+    // Tap the first enabled Record Payment button below a person card
+    await tester.tap(find.text('Record Payment').first);
     await tester.pumpAndSettle();
 
     expect(find.text('Full Payment'), findsOneWidget);
-    expect(find.text('Partial Payment'), findsWidgets);
+    expect(find.text('Partial Payment'), findsOneWidget);
+    expect(find.text('PAYMENT DATE'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget);
 
     // Switch to Partial Payment and enter 20
     await tester.tap(find.widgetWithText(InkWell, 'Partial Payment'));
@@ -419,11 +425,26 @@ void main() {
     await tester.tap(find.text('Record Partial Payment (₱20)'));
     await tester.pumpAndSettle();
 
-    // Now Total Collected Already increased from 50 to 70, To Be Received decreased from 100 to 80,
-    // and +₱20 is recorded in PAYMENT HISTORY!
-    expect(find.text('₱70 / ₱150 (47%)'), findsOneWidget);
-    expect(find.text('Total Collected: ₱70'), findsOneWidget);
+    // +₱20 is now recorded in PAYMENT HISTORY (just the payment amount is shown)
     expect(find.text('+₱20'), findsOneWidget);
+
+    // Edit the +₱20 payment in PAYMENT HISTORY to ₱30
+    final editButtons = find.byTooltip('Edit Payment');
+    expect(editButtons, findsWidgets);
+    await tester.tap(editButtons.first);
+    await tester.pumpAndSettle();
+
+    final editAmountField = find.widgetWithText(
+      TextField,
+      'Payment Amount (₱)',
+    );
+    await tester.enterText(editAmountField, '30');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save Changes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('+₱30'), findsOneWidget);
   });
 
   testWidgets(

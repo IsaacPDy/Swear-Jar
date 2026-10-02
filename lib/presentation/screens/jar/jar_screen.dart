@@ -10,10 +10,12 @@ import 'package:swear_jar/presentation/widgets/common_widgets.dart';
 class JarScreen extends ConsumerWidget {
   const JarScreen({super.key});
 
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupTotalToBeReceived = ref.watch(groupTotalActiveDebtProvider);
-    final groupTotalCollected = ref.watch(groupTotalCollectedProvider);
     final activeMemberBalances = ref.watch(activeMemberBalancesProvider);
     final paymentHistory = ref.watch(paymentHistoryProvider);
     final config = ref.watch(systemConfigProvider).valueOrNull;
@@ -75,11 +77,6 @@ class JarScreen extends ConsumerWidget {
         return a.user.displayName.compareTo(b.user.displayName);
       });
 
-    final totalIncurredGroup = groupTotalToBeReceived + groupTotalCollected;
-    final groupProgress = totalIncurredGroup > 0.001
-        ? (groupTotalCollected / totalIncurredGroup).clamp(0.0, 1.0)
-        : 0.0;
-
     final pageHeader = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -104,7 +101,7 @@ class JarScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Total amount each member should pay, with group totals and payment history.',
+          'Track group balances to be received and payment history.',
           style: GoogleFonts.inter(
             fontSize: 13.5,
             color: AppColors.textSecondary,
@@ -119,117 +116,25 @@ class JarScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TO BE RECEIVED',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    CurrencyText(
-                      amount: groupTotalToBeReceived,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: groupTotalToBeReceived > 0
-                          ? AppColors.accentPrimary
-                          : AppColors.accentMint,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 48,
-                color: AppColors.borderDefault,
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'COLLECTED ALREADY',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.accentMint,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    CurrencyText(
-                      amount: groupTotalCollected,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.accentMint,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            'TO BE RECEIVED',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          CurrencyText(
+            amount: groupTotalToBeReceived,
+            fontSize: 36,
+            fontWeight: FontWeight.w800,
+            color: groupTotalToBeReceived > 0
+                ? AppColors.accentPrimary
+                : AppColors.accentMint,
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.bgSurfaceElevated,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderDefault),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Collection Progress',
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '₱${groupTotalCollected.toStringAsFixed(0)} / ₱${totalIncurredGroup.toStringAsFixed(0)} (${(groupProgress * 100).toStringAsFixed(0)}%)',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: groupProgress,
-                    minHeight: 7,
-                    backgroundColor: AppColors.bgBase,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      AppColors.accentMint,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -299,35 +204,22 @@ class JarScreen extends ConsumerWidget {
               ),
             ],
           ),
-          if (manageableSummaries.isNotEmpty && currentUser != null) ...[
-            const SizedBox(height: 16),
-            NeonButton(
-              label: 'Record Payment (Full or Partial)',
-              icon: Icons.payments_outlined,
-              type: NeonButtonType.mint,
-              width: double.infinity,
-              onPressed: () => _showRecordPaymentModal(
-                context: context,
-                ref: ref,
-                initialSummary: manageableSummaries.first,
-                selectableSummaries: manageableSummaries,
-                getUser: getUser,
-                currentUser: currentUser,
-              ),
-            ),
-          ],
         ],
       ),
     );
 
+    final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
     final paymentHistorySection = _buildPaymentHistorySection(
       context: context,
+      ref: ref,
       paymentHistory: paymentHistory,
+      allDebts: allDebts,
       getUser: getUser,
-      groupTotalCollected: groupTotalCollected,
+      currentUser: currentUser,
+      isKeeperOrAdmin: isKeeperOrAdmin,
     );
 
-    final amountEachPersonSection = Column(
+    final personCardsSection = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (transferredBalances.isNotEmpty) ...[
@@ -368,16 +260,6 @@ class JarScreen extends ConsumerWidget {
             ),
           const SizedBox(height: 16),
         ],
-        Text(
-          'AMOUNT EACH PERSON SHOULD PAY (TO BE RECEIVED)',
-          style: GoogleFonts.inter(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 10),
         NeonCard(
           padding: EdgeInsets.all(isDesktop ? 20 : 16),
           borderRadius: 16,
@@ -390,12 +272,12 @@ class JarScreen extends ConsumerWidget {
 
               return Wrap(
                 spacing: spacing,
-                runSpacing: spacing,
+                runSpacing: 16,
                 children: [
                   for (final item in memberBoxItems)
                     SizedBox(
                       width: tileWidth.clamp(110.0, 260.0),
-                      child: _buildPersonToBeReceivedBox(
+                      child: _buildPersonToBeReceivedCardWithAction(
                         context: context,
                         ref: ref,
                         user: item.user,
@@ -448,7 +330,7 @@ class JarScreen extends ConsumerWidget {
                       const SizedBox(width: 24),
                       Expanded(
                         flex: 6,
-                        child: amountEachPersonSection,
+                        child: personCardsSection,
                       ),
                     ],
                   )
@@ -457,7 +339,7 @@ class JarScreen extends ConsumerWidget {
                   const SizedBox(height: 22),
                   paymentHistorySection,
                   const SizedBox(height: 24),
-                  amountEachPersonSection,
+                  personCardsSection,
                 ],
               ],
             ),
@@ -468,8 +350,8 @@ class JarScreen extends ConsumerWidget {
   }
 
   /// Person box styled like the "Who swore?" boxes in ReportSwearScreen,
-  /// displaying each person and their To Be Received amount (without Collected Already).
-  Widget _buildPersonToBeReceivedBox({
+  /// with the "Record Payment" button placed directly below each person card.
+  Widget _buildPersonToBeReceivedCardWithAction({
     required BuildContext context,
     required WidgetRef ref,
     required AppUser user,
@@ -481,111 +363,103 @@ class JarScreen extends ConsumerWidget {
     required AppUser? currentUser,
   }) {
     final hasDebt = toBeReceived > 0.001;
-    final canTapToPay = hasDebt && canManage && summary != null && currentUser != null;
+    final canTapToPay =
+        hasDebt && canManage && summary != null && currentUser != null;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: canTapToPay
-            ? () => _showRecordPaymentModal(
-                  context: context,
-                  ref: ref,
-                  initialSummary: summary,
-                  selectableSummaries: manageableSummaries,
-                  getUser: getUser,
-                  currentUser: currentUser,
-                )
-            : null,
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-          decoration: BoxDecoration(
-            color: hasDebt
-                ? const Color(0xFF17202A)
-                : AppColors.bgSurfaceSubtle,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: canTapToPay
+                ? () => _showRecordPaymentModal(
+                      context: context,
+                      ref: ref,
+                      initialSummary: summary,
+                      selectableSummaries: manageableSummaries,
+                      getUser: getUser,
+                      currentUser: currentUser,
+                    )
+                : null,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasDebt
-                  ? AppColors.accentPrimary.withValues(alpha: 0.5)
-                  : AppColors.borderDefault,
-              width: hasDebt ? 1.4 : 1.0,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              UserAvatar(user: user, size: 46, showBadge: false),
-              const SizedBox(height: 10),
-              Text(
-                user.displayName.split(' ').first,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              decoration: BoxDecoration(
+                color: hasDebt
+                    ? const Color(0xFF17202A)
+                    : AppColors.bgSurfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: hasDebt
+                      ? AppColors.accentPrimary.withValues(alpha: 0.5)
+                      : AppColors.borderDefault,
+                  width: hasDebt ? 1.4 : 1.0,
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'To Be Received',
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              CurrencyText(
-                amount: toBeReceived,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: hasDebt ? AppColors.accentPrimary : AppColors.accentMint,
-              ),
-              const SizedBox(height: 10),
-              if (canTapToPay)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentMint.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.accentMint.withValues(alpha: 0.4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UserAvatar(user: user, size: 46, showBadge: false),
+                  const SizedBox(height: 10),
+                  Text(
+                    user.displayName.split(' ').first,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.payments_outlined,
-                        size: 13,
-                        color: AppColors.accentMint,
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          'Record Payment',
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.accentMint,
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 6),
+                  Text(
+                    'To Be Received',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                )
-              else if (hasDebt)
-                StatusPill.fromDebt(DebtStatus.active)
-              else
-                StatusPill.fromDebt(DebtStatus.paid),
-            ],
+                  const SizedBox(height: 2),
+                  CurrencyText(
+                    amount: toBeReceived,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: hasDebt
+                        ? AppColors.accentPrimary
+                        : AppColors.accentMint,
+                  ),
+                  const SizedBox(height: 8),
+                  if (hasDebt)
+                    StatusPill.fromDebt(DebtStatus.active)
+                  else
+                    StatusPill.fromDebt(DebtStatus.paid),
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        NeonButton(
+          label: 'Record Payment',
+          icon: Icons.payments_outlined,
+          type: canTapToPay ? NeonButtonType.mint : NeonButtonType.secondary,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          onPressed: canTapToPay
+              ? () => _showRecordPaymentModal(
+                    context: context,
+                    ref: ref,
+                    initialSummary: summary,
+                    selectableSummaries: manageableSummaries,
+                    getUser: getUser,
+                    currentUser: currentUser,
+                  )
+              : null,
+        ),
+      ],
     );
   }
 
@@ -694,39 +568,52 @@ class JarScreen extends ConsumerWidget {
     );
   }
 
-  /// Payment History section placed below the To Be Received / Collected Already section,
+  /// Payment History section placed below the To Be Received section,
   /// displaying ONLY the history of payments made.
   Widget _buildPaymentHistorySection({
     required BuildContext context,
+    required WidgetRef ref,
     required List<PaymentHistoryItem> paymentHistory,
+    required List<DebtObligation> allDebts,
     required AppUser Function(String) getUser,
-    required double groupTotalCollected,
+    required AppUser? currentUser,
+    required bool isKeeperOrAdmin,
   }) {
+    bool canEditPayment(PaymentHistoryItem item) {
+      if (currentUser == null) return false;
+      return isKeeperOrAdmin || currentUser.id == item.recipientId;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Flexible(
-              child: Text(
-                'PAYMENT HISTORY',
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: AppColors.textSecondary,
-                ),
+            Text(
+              'PAYMENT HISTORY',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              'Total Collected: ₱${groupTotalCollected.toStringAsFixed(0)}',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.accentMint,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderDefault),
+              ),
+              child: Text(
+                '${paymentHistory.length}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
           ],
@@ -760,8 +647,13 @@ class JarScreen extends ConsumerWidget {
                       ),
                     ),
                   _buildPaymentHistoryRow(
+                    context: context,
+                    ref: ref,
                     item: paymentHistory[i],
                     debtor: getUser(paymentHistory[i].debtorId),
+                    allDebts: allDebts,
+                    currentUser: currentUser,
+                    canEdit: canEditPayment(paymentHistory[i]),
                   ),
                 ],
               ],
@@ -772,8 +664,13 @@ class JarScreen extends ConsumerWidget {
   }
 
   Widget _buildPaymentHistoryRow({
+    required BuildContext context,
+    required WidgetRef ref,
     required PaymentHistoryItem item,
     required AppUser debtor,
+    required List<DebtObligation> allDebts,
+    required AppUser? currentUser,
+    required bool canEdit,
   }) {
     final dateText = DateFormat('MMM d, yyyy').format(item.recordedAt);
     final subtitle = (item.note != null && item.note!.trim().isNotEmpty)
@@ -810,46 +707,408 @@ class JarScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '+₱${item.amount.toStringAsFixed(0)}',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: AppColors.accentMint,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(height: 3),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: item.isPartial
-                    ? AppColors.accentWarning.withValues(alpha: 0.14)
-                    : AppColors.accentMint.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: item.isPartial
-                      ? AppColors.accentWarning.withValues(alpha: 0.35)
-                      : AppColors.accentMint.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Text(
-                item.isPartial ? 'Partial Payment' : 'Full Payment',
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: item.isPartial
-                      ? AppColors.accentWarning
-                      : AppColors.accentMint,
-                ),
-              ),
-            ),
-          ],
+        Text(
+          '+₱${item.amount.toStringAsFixed(0)}',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: AppColors.accentMint,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
+        if (canEdit && currentUser != null) ...[
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: 'Edit Payment',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
+            onPressed: () => _showEditPaymentHistoryModal(
+              context: context,
+              ref: ref,
+              item: item,
+              debtor: debtor,
+              allDebts: allDebts,
+              currentUser: currentUser,
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _showEditPaymentHistoryModal({
+    required BuildContext context,
+    required WidgetRef ref,
+    required PaymentHistoryItem item,
+    required AppUser debtor,
+    required List<DebtObligation> allDebts,
+    required AppUser currentUser,
+  }) {
+    final paymentIdSet = item.paymentIds.toSet();
+    final targetDebts = allDebts
+        .where((d) =>
+            d.debtorId == item.debtorId &&
+            d.recipientId == item.recipientId &&
+            d.status != DebtStatus.dismissed)
+        .toList();
+
+    final maxAllowedAmount = targetDebts.fold<double>(0.0, (sum, d) {
+      final removedFromDebt = d.payments
+          .where((p) => paymentIdSet.contains(p.id))
+          .fold<double>(0.0, (s, p) => s + p.amount);
+      final restoredBalance =
+          (d.remainingBalance + removedFromDebt).clamp(0.0, d.originalAmount);
+      return sum + restoredBalance;
+    });
+
+    final effectiveMax =
+        maxAllowedAmount > item.amount ? maxAllowedAmount : item.amount;
+
+    DateTime selectedPaymentDate = item.recordedAt;
+    final amountController = TextEditingController(
+      text: item.amount.toStringAsFixed(0),
+    );
+    final noteController = TextEditingController(text: item.note ?? '');
+    final isDesktop = AppBreakpoints.isDesktop(context);
+
+    Widget buildEditForm(BuildContext modalCtx) {
+      return StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final parsedAmount =
+              double.tryParse(amountController.text.trim()) ?? 0.0;
+          final isValidAmount =
+              parsedAmount > 0.001 && parsedAmount <= effectiveMax + 0.001;
+
+          final now = DateTime.now();
+          final isToday = _isSameDay(selectedPaymentDate, now);
+          final isYesterday = _isSameDay(
+            selectedPaymentDate,
+            now.subtract(const Duration(days: 1)),
+          );
+          final formattedPaymentDate = isToday
+              ? 'Today, ${DateFormat.yMMMd().format(selectedPaymentDate)}'
+              : isYesterday
+                  ? 'Yesterday, ${DateFormat.yMMMd().format(selectedPaymentDate)}'
+                  : DateFormat.yMMMd().format(selectedPaymentDate);
+
+          Future<void> pickPaymentDate() async {
+            final currentNow = DateTime.now();
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: selectedPaymentDate.isAfter(currentNow)
+                  ? currentNow
+                  : selectedPaymentDate,
+              firstDate: DateTime(2020),
+              lastDate: currentNow,
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.dark(
+                      primary: AppColors.accentPrimary,
+                      onPrimary: AppColors.onAccentPrimary,
+                      surface: AppColors.bgSurface,
+                      onSurface: AppColors.textPrimary,
+                    ),
+                    dialogTheme: const DialogThemeData(
+                      backgroundColor: AppColors.bgSurface,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+
+            if (picked != null) {
+              setModalState(() {
+                selectedPaymentDate = DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  selectedPaymentDate.hour,
+                  selectedPaymentDate.minute,
+                  selectedPaymentDate.second,
+                );
+              });
+            }
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Edit Payment • ${debtor.displayName}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Max payable for this member: ₱${effectiveMax.toStringAsFixed(0)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Payment Amount (₱)',
+                    labelStyle:
+                        GoogleFonts.inter(color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.bgSurfaceElevated,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppColors.borderDefault),
+                    ),
+                  ),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'PAYMENT DATE',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildPaymentDateChip(
+                          label: 'Today',
+                          selected: isToday,
+                          onTap: () => setModalState(
+                            () => selectedPaymentDate = DateTime.now(),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildPaymentDateChip(
+                          label: 'Yesterday',
+                          selected: isYesterday,
+                          onTap: () => setModalState(
+                            () => selectedPaymentDate = DateTime.now()
+                                .subtract(const Duration(days: 1)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: pickPaymentDate,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSurfaceElevated,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: !isToday
+                              ? AppColors.accentPrimary.withValues(alpha: 0.45)
+                              : AppColors.borderDefault,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 16,
+                            color: AppColors.accentPrimary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              formattedPaymentDate,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  decoration: InputDecoration(
+                    labelText: 'Note (Optional, e.g. GCash ref #)',
+                    labelStyle:
+                        GoogleFonts.inter(color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.bgSurfaceElevated,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppColors.borderDefault),
+                    ),
+                  ),
+                  style: GoogleFonts.inter(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: NeonButton(
+                        label: 'Delete',
+                        icon: Icons.delete_outline,
+                        type: NeonButtonType.danger,
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          Navigator.pop(modalCtx);
+                          await ref
+                              .read(ledgerRepositoryProvider)
+                              .updatePaymentHistoryItem(
+                                item: item,
+                                allDebts: allDebts,
+                                newAmount: 0.0,
+                                newDate: selectedPaymentDate,
+                                newNote: null,
+                                updatedBy: currentUser.id,
+                              );
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Deleted payment for ${debtor.displayName} and restored balance.',
+                              ),
+                              backgroundColor: AppColors.textMuted,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: NeonButton(
+                        label: 'Save Changes',
+                        icon: Icons.check_rounded,
+                        type: NeonButtonType.mint,
+                        onPressed: !isValidAmount
+                            ? null
+                            : () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                final clampedAmount = parsedAmount
+                                    .clamp(0.01, effectiveMax)
+                                    .toDouble();
+                                Navigator.pop(modalCtx);
+                                await ref
+                                    .read(ledgerRepositoryProvider)
+                                    .updatePaymentHistoryItem(
+                                      item: item,
+                                      allDebts: allDebts,
+                                      newAmount: clampedAmount,
+                                      newDate: selectedPaymentDate,
+                                      newNote: noteController.text.trim().isEmpty
+                                          ? null
+                                          : noteController.text.trim(),
+                                      updatedBy: currentUser.id,
+                                    );
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Updated payment for ${debtor.displayName} to ₱${clampedAmount.toStringAsFixed(0)}!',
+                                    ),
+                                    backgroundColor: AppColors.accentSuccess,
+                                  ),
+                                );
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: AppColors.bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.borderDefault),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: buildEditForm(ctx),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        side: BorderSide(color: AppColors.borderDefault),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          top: 24,
+          left: 20,
+          right: 20,
+        ),
+        child: buildEditForm(ctx),
+      ),
     );
   }
 
@@ -863,6 +1122,7 @@ class JarScreen extends ConsumerWidget {
   }) {
     MemberLedgerSummary selectedSummary = initialSummary;
     bool isPartialMode = false;
+    DateTime selectedPaymentDate = DateTime.now();
     final amountController = TextEditingController(
       text: selectedSummary.toBeReceived.toStringAsFixed(0),
     );
@@ -883,10 +1143,61 @@ class JarScreen extends ConsumerWidget {
               parsedAmount.clamp(0.0, maxBalance).toDouble();
           final remainingAfter =
               (maxBalance - effectivePayment).clamp(0.0, maxBalance);
-          final collectedAfter =
-              selectedSummary.collectedAlready + effectivePayment;
           final isValidAmount =
               parsedAmount > 0.001 && parsedAmount <= maxBalance + 0.001;
+
+          final now = DateTime.now();
+          final isToday = _isSameDay(selectedPaymentDate, now);
+          final isYesterday = _isSameDay(
+            selectedPaymentDate,
+            now.subtract(const Duration(days: 1)),
+          );
+          final formattedPaymentDate = isToday
+              ? 'Today, ${DateFormat.yMMMd().format(selectedPaymentDate)}'
+              : isYesterday
+                  ? 'Yesterday, ${DateFormat.yMMMd().format(selectedPaymentDate)}'
+                  : DateFormat.yMMMd().format(selectedPaymentDate);
+
+          Future<void> pickPaymentDate() async {
+            final currentNow = DateTime.now();
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: selectedPaymentDate.isAfter(currentNow)
+                  ? currentNow
+                  : selectedPaymentDate,
+              firstDate: DateTime(2020),
+              lastDate: currentNow,
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.dark(
+                      primary: AppColors.accentPrimary,
+                      onPrimary: AppColors.onAccentPrimary,
+                      surface: AppColors.bgSurface,
+                      onSurface: AppColors.textPrimary,
+                    ),
+                    dialogTheme: const DialogThemeData(
+                      backgroundColor: AppColors.bgSurface,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+
+            if (picked != null) {
+              setModalState(() {
+                selectedPaymentDate = DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  currentNow.hour,
+                  currentNow.minute,
+                  currentNow.second,
+                );
+              });
+            }
+          }
 
           void setPaymentAmount(double amount, {required bool partial}) {
             final clamped = amount.clamp(1.0, maxBalance);
@@ -942,7 +1253,7 @@ class JarScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'To Be Received: ₱${maxBalance.toStringAsFixed(0)} • Collected Already: ₱${selectedSummary.collectedAlready.toStringAsFixed(0)}',
+                  'To Be Received: ₱${maxBalance.toStringAsFixed(0)}',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: AppColors.textSecondary,
@@ -1208,6 +1519,91 @@ class JarScreen extends ConsumerWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'PAYMENT DATE',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildPaymentDateChip(
+                          label: 'Today',
+                          selected: isToday,
+                          onTap: () => setModalState(
+                            () => selectedPaymentDate = DateTime.now(),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildPaymentDateChip(
+                          label: 'Yesterday',
+                          selected: isYesterday,
+                          onTap: () => setModalState(
+                            () => selectedPaymentDate = DateTime.now()
+                                .subtract(const Duration(days: 1)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: pickPaymentDate,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSurfaceElevated,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: !isToday
+                              ? AppColors.accentPrimary.withValues(alpha: 0.45)
+                              : AppColors.borderDefault,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 16,
+                            color: AppColors.accentPrimary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              formattedPaymentDate,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1242,31 +1638,6 @@ class JarScreen extends ConsumerWidget {
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'Collected Already (After Payment)',
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '₱${collectedAfter.toStringAsFixed(0)}',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.accentMint,
                             ),
                           ),
                         ],
@@ -1348,6 +1719,7 @@ class JarScreen extends ConsumerWidget {
                                 note: noteController.text.trim().isEmpty
                                     ? null
                                     : noteController.text.trim(),
+                                paidAt: selectedPaymentDate,
                               );
                           messenger.showSnackBar(
                             SnackBar(
@@ -1405,6 +1777,37 @@ class JarScreen extends ConsumerWidget {
           right: 20,
         ),
         child: buildForm(ctx),
+      ),
+    );
+  }
+
+  Widget _buildPaymentDateChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.accentPrimary.withValues(alpha: 0.18)
+              : AppColors.bgSurfaceElevated,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? AppColors.accentPrimary : AppColors.borderDefault,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
       ),
     );
   }

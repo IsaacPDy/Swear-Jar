@@ -446,13 +446,14 @@ class MockDataService
     required double amount,
     required String recordedBy,
     String? note,
+    DateTime? paidAt,
   }) async {
     final updatedDebt = LedgerEngine.recordPayment(
       debt: debt,
       amount: amount,
       recordedBy: recordedBy,
       note: note,
-      now: DateTime.now(),
+      now: paidAt ?? DateTime.now(),
     );
 
     final idx = _debts.indexWhere((d) => d.id == debt.id);
@@ -469,13 +470,44 @@ class MockDataService
     required double amount,
     required String recordedBy,
     String? note,
+    DateTime? paidAt,
   }) async {
     final updatedDebts = LedgerEngine.recordMemberPayment(
       activeDebts: activeDebts,
       amount: amount,
       recordedBy: recordedBy,
       note: note,
-      now: DateTime.now(),
+      now: paidAt ?? DateTime.now(),
+    );
+
+    for (final updated in updatedDebts) {
+      final idx = _debts.indexWhere((d) => d.id == updated.id);
+      if (idx != -1) {
+        _debts[idx] = updated;
+      }
+    }
+    if (updatedDebts.isNotEmpty) {
+      _debtsController.add(List.unmodifiable(_debts));
+    }
+    return updatedDebts;
+  }
+
+  @override
+  Future<List<DebtObligation>> updatePaymentHistoryItem({
+    required PaymentHistoryItem item,
+    required List<DebtObligation> allDebts,
+    required double newAmount,
+    required DateTime newDate,
+    String? newNote,
+    required String updatedBy,
+  }) async {
+    final updatedDebts = LedgerEngine.updatePaymentHistoryItem(
+      item: item,
+      allDebts: _debts,
+      newAmount: newAmount,
+      newDate: newDate,
+      newNote: newNote,
+      updatedBy: updatedBy,
     );
 
     for (final updated in updatedDebts) {

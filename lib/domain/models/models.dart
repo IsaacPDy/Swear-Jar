@@ -569,6 +569,7 @@ class MemberLedgerSummary {
 
 class PaymentHistoryItem {
   final String id;
+  final List<String> paymentIds;
   final String debtorId;
   final String recipientId;
   final double amount;
@@ -579,6 +580,7 @@ class PaymentHistoryItem {
 
   const PaymentHistoryItem({
     required this.id,
+    this.paymentIds = const [],
     required this.debtorId,
     required this.recipientId,
     required this.amount,

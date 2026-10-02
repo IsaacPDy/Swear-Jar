@@ -436,6 +436,7 @@ class LedgerEngine {
         if (existing == null) {
           groupedByAction[groupKey] = PaymentHistoryItem(
             id: p.id,
+            paymentIds: [p.id],
             debtorId: debt.debtorId,
             recipientId: debt.recipientId,
             amount: p.amount,
@@ -447,6 +448,7 @@ class LedgerEngine {
         } else {
           groupedByAction[groupKey] = PaymentHistoryItem(
             id: existing.id,
+            paymentIds: [...existing.paymentIds, p.id],
             debtorId: existing.debtorId,
             recipientId: existing.recipientId,
             amount: existing.amount + p.amount,
@@ -464,6 +466,92 @@ class LedgerEngine {
     final items = groupedByAction.values.toList()
       ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
     return items;
+  }
+
+  /// Edit or delete a payment history item (`newAmount == 0` deletes the payment and restores the balance).
+  /// Returns the list of modified `DebtObligation`s.
+  static List<DebtObligation> updatePaymentHistoryItem({
+    required PaymentHistoryItem item,
+    required List<DebtObligation> allDebts,
+    required double newAmount,
+    required DateTime newDate,
+    String? newNote,
+    required String updatedBy,
+  }) {
+    final targetIds = item.paymentIds.isNotEmpty
+        ? item.paymentIds.toSet()
+        : <String>{item.id};
+
+    final modifiedById = <String, DebtObligation>{};
+    final candidateDebts = <DebtObligation>[];
+
+    for (final debt in allDebts) {
+      if (debt.debtorId != item.debtorId ||
+          debt.recipientId != item.recipientId) {
+        continue;
+      }
+
+      final removedPayments =
+          debt.payments.where((p) => targetIds.contains(p.id)).toList();
+
+      if (removedPayments.isNotEmpty) {
+        final removedSum =
+            removedPayments.fold<double>(0.0, (sum, p) => sum + p.amount);
+        final keptPayments =
+            debt.payments.where((p) => !targetIds.contains(p.id)).toList();
+
+        if (debt.isDismissed) {
+          final restored = debt.copyWith(payments: keptPayments);
+          modifiedById[restored.id] = restored;
+          candidateDebts.add(restored);
+        } else {
+          final newRemaining = (debt.remainingBalance + removedSum)
+              .clamp(0.0, debt.originalAmount);
+          final isStillPaid = newRemaining <= 0.001;
+          final restored = DebtObligation(
+            id: debt.id,
+            reportId: debt.reportId,
+            debtorId: debt.debtorId,
+            recipientId: debt.recipientId,
+            originalAmount: debt.originalAmount,
+            remainingBalance: isStillPaid ? 0.0 : newRemaining,
+            status: isStillPaid ? DebtStatus.paid : DebtStatus.active,
+            isTransferred: debt.isTransferred,
+            transferredFromKeeperId: debt.transferredFromKeeperId,
+            payments: keptPayments,
+            createdAt: debt.createdAt,
+            resolvedAt: isStillPaid ? debt.resolvedAt : null,
+          );
+          modifiedById[restored.id] = restored;
+          candidateDebts.add(restored);
+        }
+      } else {
+        candidateDebts.add(debt);
+      }
+    }
+
+    final trimmedNote = newNote?.trim();
+    if (newAmount > 0.001) {
+      final activeToPay = candidateDebts
+          .where((d) => d.isActive && d.remainingBalance > 0.001)
+          .toList();
+      if (activeToPay.isNotEmpty) {
+        final reapplied = recordMemberPayment(
+          activeDebts: activeToPay,
+          amount: newAmount,
+          recordedBy: updatedBy,
+          note: (trimmedNote == null || trimmedNote.isEmpty)
+              ? null
+              : trimmedNote,
+          now: newDate,
+        );
+        for (final updated in reapplied) {
+          modifiedById[updated.id] = updated;
+        }
+      }
+    }
+
+    return modifiedById.values.toList();
   }
 
   /// Appoint a new Keeper and transfer active standard debts to the new Keeper.

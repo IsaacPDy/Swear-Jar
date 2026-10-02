@@ -755,12 +755,14 @@ class FirebaseDataService
     required double amount,
     required String recordedBy,
     String? note,
+    DateTime? paidAt,
   }) async {
     final updatedDebt = LedgerEngine.recordPayment(
       debt: debt,
       amount: amount,
       recordedBy: recordedBy,
       note: note,
+      now: paidAt,
     );
 
     await _firestore
@@ -777,12 +779,46 @@ class FirebaseDataService
     required double amount,
     required String recordedBy,
     String? note,
+    DateTime? paidAt,
   }) async {
     final updatedDebts = LedgerEngine.recordMemberPayment(
       activeDebts: activeDebts,
       amount: amount,
       recordedBy: recordedBy,
       note: note,
+      now: paidAt,
+    );
+
+    if (updatedDebts.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final updated in updatedDebts) {
+        batch.set(
+          _firestore.collection('debts').doc(updated.id),
+          updated.toMap(),
+        );
+      }
+      await batch.commit();
+    }
+
+    return updatedDebts;
+  }
+
+  @override
+  Future<List<DebtObligation>> updatePaymentHistoryItem({
+    required PaymentHistoryItem item,
+    required List<DebtObligation> allDebts,
+    required double newAmount,
+    required DateTime newDate,
+    String? newNote,
+    required String updatedBy,
+  }) async {
+    final updatedDebts = LedgerEngine.updatePaymentHistoryItem(
+      item: item,
+      allDebts: allDebts,
+      newAmount: newAmount,
+      newDate: newDate,
+      newNote: newNote,
+      updatedBy: updatedBy,
     );
 
     if (updatedDebts.isNotEmpty) {

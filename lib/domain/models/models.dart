@@ -174,9 +174,10 @@ class SwearReport {
   final String? reviewedBy;
   final DateTime? reviewedAt;
   final String? rejectionReason;
+  final DateTime swearDate;
   final DateTime createdAt;
 
-  const SwearReport({
+  SwearReport({
     required this.id,
     required this.reporterId,
     required this.accusedId,
@@ -188,8 +189,9 @@ class SwearReport {
     this.reviewedBy,
     this.reviewedAt,
     this.rejectionReason,
+    DateTime? swearDate,
     required this.createdAt,
-  });
+  }) : swearDate = swearDate ?? createdAt;
 
   bool get isPending => status == ReportStatus.pending;
   bool get isConfirmed => status == ReportStatus.confirmed;
@@ -201,12 +203,14 @@ class SwearReport {
     String? accusedId,
     int? count,
     String? note,
+    bool clearNote = false,
     double? rateApplied,
     double? totalAmount,
     ReportStatus? status,
     String? reviewedBy,
     DateTime? reviewedAt,
     String? rejectionReason,
+    DateTime? swearDate,
     DateTime? createdAt,
   }) {
     return SwearReport(
@@ -214,13 +218,14 @@ class SwearReport {
       reporterId: reporterId ?? this.reporterId,
       accusedId: accusedId ?? this.accusedId,
       count: count ?? this.count,
-      note: note ?? this.note,
+      note: clearNote ? null : (note ?? this.note),
       rateApplied: rateApplied ?? this.rateApplied,
       totalAmount: totalAmount ?? this.totalAmount,
       status: status ?? this.status,
       reviewedBy: reviewedBy ?? this.reviewedBy,
       reviewedAt: reviewedAt ?? this.reviewedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      swearDate: swearDate ?? this.swearDate,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -238,6 +243,7 @@ class SwearReport {
       'reviewedBy': reviewedBy,
       'reviewedAt': reviewedAt?.toIso8601String(),
       'rejectionReason': rejectionReason,
+      'swearDate': swearDate.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -247,6 +253,12 @@ class SwearReport {
     final rateVal = (map['rateApplied'] as num?)?.toDouble() ?? 50.0;
     final totalVal =
         (map['totalAmount'] as num?)?.toDouble() ?? (countVal * rateVal);
+    final parsedCreatedAt = map['createdAt'] != null
+        ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+        : DateTime.now();
+    final parsedSwearDate = map['swearDate'] != null
+        ? DateTime.tryParse(map['swearDate'].toString()) ?? parsedCreatedAt
+        : parsedCreatedAt;
 
     return SwearReport(
       id: id ?? map['id'] as String? ?? '',
@@ -262,9 +274,8 @@ class SwearReport {
           ? DateTime.tryParse(map['reviewedAt'].toString())
           : null,
       rejectionReason: map['rejectionReason'] as String?,
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      swearDate: parsedSwearDate,
+      createdAt: parsedCreatedAt,
     );
   }
 

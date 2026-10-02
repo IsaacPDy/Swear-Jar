@@ -240,6 +240,7 @@ class MockDataService
     required int count,
     String? note,
     required double rateApplied,
+    DateTime? swearDate,
   }) async {
     final now = DateTime.now();
     final newReport = SwearReport(
@@ -251,10 +252,12 @@ class MockDataService
       rateApplied: rateApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
+      swearDate: swearDate ?? now,
       createdAt: now,
     );
 
     _reports.insert(0, newReport);
+    _reports.sort((a, b) => b.swearDate.compareTo(a.swearDate));
     _reportsController.add(List.unmodifiable(_reports));
     return newReport;
   }
@@ -319,6 +322,83 @@ class MockDataService
       _reportsController.add(List.unmodifiable(_reports));
     }
     return rejected;
+  }
+
+  @override
+  Future<ReportUpdateResult> updateReport({
+    required SwearReport report,
+    required String accusedId,
+    required int count,
+    required DateTime swearDate,
+    String? note,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.updateReport(
+      report: report,
+      accusedId: accusedId,
+      count: count,
+      swearDate: swearDate,
+      note: note,
+      existingDebts: _debts,
+      now: DateTime.now(),
+    );
+
+    final reportIdx = _reports.indexWhere((r) => r.id == report.id);
+    if (reportIdx != -1) {
+      _reports[reportIdx] = result.updatedReport;
+      _reports.sort((a, b) => b.swearDate.compareTo(a.swearDate));
+    }
+
+    if (result.updatedDebt != null) {
+      final debtIdx = _debts.indexWhere((d) => d.id == result.updatedDebt!.id);
+      if (debtIdx != -1) {
+        _debts[debtIdx] = result.updatedDebt!;
+      }
+    }
+
+    if (result.swearCountDelta != 0) {
+      final newTotal =
+          (_config.totalSwearsAllTime + result.swearCountDelta).clamp(0, 999999);
+      _config = _config.copyWith(
+        totalSwearsAllTime: newTotal,
+        updatedAt: DateTime.now(),
+      );
+      _configController.add(_config);
+    }
+
+    _reportsController.add(List.unmodifiable(_reports));
+    _debtsController.add(List.unmodifiable(_debts));
+
+    return result;
+  }
+
+  @override
+  Future<ReportDeletionResult> deleteReport({
+    required SwearReport report,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.deleteReport(
+      report: report,
+      existingDebts: _debts,
+    );
+
+    _reports.removeWhere((r) => r.id == result.deletedReportId);
+    _debts.removeWhere((d) => result.deletedDebtIds.contains(d.id));
+
+    if (result.swearCountDelta != 0) {
+      final newTotal =
+          (_config.totalSwearsAllTime + result.swearCountDelta).clamp(0, 999999);
+      _config = _config.copyWith(
+        totalSwearsAllTime: newTotal,
+        updatedAt: DateTime.now(),
+      );
+      _configController.add(_config);
+    }
+
+    _reportsController.add(List.unmodifiable(_reports));
+    _debtsController.add(List.unmodifiable(_debts));
+
+    return result;
   }
 
   @override

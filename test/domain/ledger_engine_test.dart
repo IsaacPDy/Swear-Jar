@@ -212,5 +212,87 @@ void main() {
       expect(migrated.first.recipientId, 'new_keeper');
       expect(migrated.last.recipientId, memberAliceId); // Preserved!
     });
+
+    test('updateReport adjusts confirmed report, linked debt balance, and swearCountDelta', () {
+      final confirmedReport = SwearReport(
+        id: 'rep_confirmed_1',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 2,
+        note: 'Initial note',
+        rateApplied: 50.0,
+        totalAmount: 100.0,
+        status: ReportStatus.confirmed,
+        swearDate: DateTime(2026, 1, 5),
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      // Linked debt where 40 has already been paid (remaining 60)
+      final linkedDebt = DebtObligation(
+        id: 'debt_confirmed_1',
+        reportId: 'rep_confirmed_1',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 100.0,
+        remainingBalance: 60.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      final newDate = DateTime(2026, 1, 3);
+      final updateRes = LedgerEngine.updateReport(
+        report: confirmedReport,
+        accusedId: memberBobId,
+        count: 4, // Increased from 2 to 4 (+2 swears -> 200 total)
+        swearDate: newDate,
+        note: 'Audited note',
+        existingDebts: [linkedDebt],
+      );
+
+      expect(updateRes.updatedReport.count, 4);
+      expect(updateRes.updatedReport.totalAmount, 200.0);
+      expect(updateRes.updatedReport.swearDate, newDate);
+      expect(updateRes.updatedReport.note, 'Audited note');
+      expect(updateRes.swearCountDelta, 2);
+
+      expect(updateRes.updatedDebt, isNotNull);
+      expect(updateRes.updatedDebt!.originalAmount, 200.0);
+      // 40 was already paid, so remaining balance should be 200 - 40 = 160
+      expect(updateRes.updatedDebt!.remainingBalance, 160.0);
+      expect(updateRes.updatedDebt!.status, DebtStatus.active);
+    });
+
+    test('deleteReport removes linked debt and returns negative swearCountDelta for confirmed report', () {
+      final confirmedReport = SwearReport(
+        id: 'rep_del_1',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 3,
+        rateApplied: 50.0,
+        totalAmount: 150.0,
+        status: ReportStatus.confirmed,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      final linkedDebt = DebtObligation(
+        id: 'debt_del_1',
+        reportId: 'rep_del_1',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 150.0,
+        remainingBalance: 150.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      final delRes = LedgerEngine.deleteReport(
+        report: confirmedReport,
+        existingDebts: [linkedDebt],
+      );
+
+      expect(delRes.deletedReportId, 'rep_del_1');
+      expect(delRes.deletedDebtIds, ['debt_del_1']);
+      expect(delRes.swearCountDelta, -3);
+    });
   });
 }

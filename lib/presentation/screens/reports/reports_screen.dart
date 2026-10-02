@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -268,7 +269,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Reported by ${reporter.displayName} • ${DateFormat.yMMMd().add_jm().format(report.createdAt)}',
+                          'Swear Date: ${DateFormat.yMMMd().format(report.swearDate)} • Reported by ${reporter.displayName}',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.textMuted,
@@ -282,48 +283,69 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceElevated,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: isKeeperOrAdmin
+                      ? () => _showEditReportDialog(context, report)
+                      : null,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.borderSubtle),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.record_voice_over_outlined,
-                            size: 15,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              '${report.count} Swear(s) × ₱${report.rateApplied.toStringAsFixed(0)}',
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSurfaceElevated,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isKeeperOrAdmin
+                            ? AppColors.accentPrimary.withValues(alpha: 0.35)
+                            : AppColors.borderSubtle,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    CurrencyText(
-                      amount: report.totalAmount,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.record_voice_over_outlined,
+                                size: 15,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  '${report.count} Swear(s) × ₱${report.rateApplied.toStringAsFixed(0)}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              if (isKeeperOrAdmin) ...[
+                                const SizedBox(width: 6),
+                                const Icon(
+                                  Icons.edit_outlined,
+                                  size: 13,
+                                  color: AppColors.accentPrimary,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CurrencyText(
+                          amount: report.totalAmount,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
               if (report.note != null && report.note!.isNotEmpty) ...[
@@ -372,27 +394,51 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               ],
             ],
           ),
-          if (report.isPending && isKeeperOrAdmin && currentUser != null) ...[
+          if (isKeeperOrAdmin && currentUser != null) ...[
             const SizedBox(height: 14),
+            if (report.isPending) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: NeonButton(
+                      label: 'Reject',
+                      type: NeonButtonType.danger,
+                      icon: Icons.close_rounded,
+                      onPressed: () =>
+                          _confirmRejectDialog(context, report, currentUser),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: NeonButton(
+                      label: 'Confirm',
+                      type: NeonButtonType.primary,
+                      icon: Icons.check_rounded,
+                      onPressed: () => _confirmApproveDialog(
+                          context, report, currentUser, keeper, reporter),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
                   child: NeonButton(
-                    label: 'Reject',
-                    type: NeonButtonType.danger,
-                    icon: Icons.close_rounded,
-                    onPressed: () =>
-                        _confirmRejectDialog(context, report, currentUser),
+                    label: 'Edit / Audit',
+                    type: NeonButtonType.secondary,
+                    icon: Icons.edit_note_rounded,
+                    onPressed: () => _showEditReportDialog(context, report),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: NeonButton(
-                    label: 'Confirm Swear',
-                    type: NeonButtonType.primary,
-                    icon: Icons.check_rounded,
-                    onPressed: () => _confirmApproveDialog(
-                        context, report, currentUser, keeper, reporter),
+                    label: 'Delete',
+                    type: NeonButtonType.danger,
+                    icon: Icons.delete_outline_rounded,
+                    onPressed: () => _confirmDeleteDialog(context, report),
                   ),
                 ),
               ],
@@ -592,6 +638,428 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Report rejected.'),
+                  backgroundColor: AppColors.accentError,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditReportDialog(BuildContext context, SwearReport report) {
+    final approvedUsers = ref.read(approvedUsersProvider);
+    String selectedAccusedId = report.accusedId;
+    int editedCount = report.count;
+    DateTime editedDate = report.swearDate;
+    final countController = TextEditingController(text: '${report.count}');
+    final noteController = TextEditingController(text: report.note ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final newTotal = editedCount * report.rateApplied;
+
+            void syncCountFromButtons(int newCount) {
+              final clamped = newCount.clamp(1, 99);
+              setModalState(() {
+                editedCount = clamped;
+                countController.text = '$clamped';
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: AppColors.bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: AppColors.borderDefault),
+              ),
+              title: Text(
+                'Audit & Adjust Report',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (report.isConfirmed)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.accentPrimary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.accentPrimary
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline_rounded,
+                                size: 16,
+                                color: AppColors.accentPrimary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'This report is confirmed. Saving changes will automatically update its linked ledger debt and all-time swears.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Text(
+                        'ACCUSED MEMBER',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.7,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: approvedUsers
+                                .any((u) => u.id == selectedAccusedId)
+                            ? selectedAccusedId
+                            : (approvedUsers.isNotEmpty
+                                ? approvedUsers.first.id
+                                : null),
+                        dropdownColor: AppColors.bgSurfaceElevated,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.bgSurfaceElevated,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderDefault),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderDefault),
+                          ),
+                        ),
+                        style: GoogleFonts.inter(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        items: approvedUsers
+                            .map(
+                              (u) => DropdownMenuItem<String>(
+                                value: u.id,
+                                child: Text(u.displayName),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => selectedAccusedId = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'DATE OF SWEAR',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.7,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate:
+                                editedDate.isAfter(now) ? now : editedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: now,
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.dark(
+                                    primary: AppColors.accentPrimary,
+                                    onPrimary: Colors.white,
+                                    surface: AppColors.bgSurface,
+                                    onSurface: AppColors.textPrimary,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (picked != null) {
+                            setModalState(() {
+                              editedDate = DateTime(
+                                picked.year,
+                                picked.month,
+                                picked.day,
+                                editedDate.hour,
+                                editedDate.minute,
+                              );
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSurfaceElevated,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.borderDefault),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 16,
+                                color: AppColors.accentPrimary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  DateFormat.yMMMMEEEEd().format(editedDate),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.edit_calendar_outlined,
+                                size: 16,
+                                color: AppColors.textMuted,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'SWEAR COUNT (1–99)',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.7,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: editedCount > 1
+                                ? () => syncCountFromButtons(editedCount - 1)
+                                : null,
+                            icon: const Icon(Icons.remove_circle_outline),
+                            color: AppColors.accentPrimary,
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: countController,
+                              textAlign: TextAlign.center,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(2),
+                              ],
+                              style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: AppColors.bgSurfaceElevated,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.borderDefault),
+                                ),
+                              ),
+                              onChanged: (val) {
+                                final parsed = int.tryParse(val.trim());
+                                if (parsed != null && parsed >= 1) {
+                                  setModalState(
+                                      () => editedCount = parsed.clamp(1, 99));
+                                }
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: editedCount < 99
+                                ? () => syncCountFromButtons(editedCount + 1)
+                                : null,
+                            icon: const Icon(Icons.add_circle_outline),
+                            color: AppColors.accentPrimary,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Updated Total: ₱${newTotal.toStringAsFixed(0)} (₱${report.rateApplied.toStringAsFixed(0)} / swear)',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accentPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'NOTE / CONTEXT',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.7,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: noteController,
+                        maxLength: 120,
+                        decoration: InputDecoration(
+                          hintText: 'Optional note...',
+                          hintStyle: GoogleFonts.inter(
+                              color: AppColors.textMuted, fontSize: 13),
+                          filled: true,
+                          fillColor: AppColors.bgSurfaceElevated,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderDefault),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderDefault),
+                          ),
+                        ),
+                        style: GoogleFonts.inter(
+                            color: AppColors.textPrimary, fontSize: 13.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel',
+                      style: GoogleFonts.inter(color: AppColors.textMuted)),
+                ),
+                NeonButton(
+                  label: 'Save Changes',
+                  type: NeonButtonType.primary,
+                  icon: Icons.check_rounded,
+                  onPressed: () async {
+                    final parsed = int.tryParse(countController.text.trim());
+                    final finalCount =
+                        (parsed != null && parsed >= 1) ? parsed.clamp(1, 99) : editedCount;
+                    final messenger = ScaffoldMessenger.of(context);
+                    Navigator.pop(ctx);
+                    final debts = ref.read(debtsListProvider).valueOrNull ?? [];
+                    await ref.read(reportRepositoryProvider).updateReport(
+                          report: report,
+                          accusedId: selectedAccusedId,
+                          count: finalCount,
+                          swearDate: editedDate,
+                          note: noteController.text.trim(),
+                          existingDebts: debts,
+                        );
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('Report & ledger updated successfully!'),
+                        backgroundColor: AppColors.accentSuccess,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteDialog(BuildContext context, SwearReport report) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.borderDefault),
+        ),
+        title: Text(
+          'Delete Report Permanently?',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w600,
+            color: AppColors.accentError,
+          ),
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Text(
+            report.isConfirmed
+                ? 'Deleting this confirmed report will permanently remove it, delete its linked ₱${report.totalAmount.toStringAsFixed(0)} debt obligation from the ledger, and deduct ${report.count} swear(s) from the All-Time Swears counter.'
+                : 'Are you sure you want to permanently delete this report from the history?',
+            style: GoogleFonts.inter(color: AppColors.textSecondary),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(color: AppColors.textMuted)),
+          ),
+          NeonButton(
+            label: 'Delete Report',
+            type: NeonButtonType.danger,
+            icon: Icons.delete_outline_rounded,
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(ctx);
+              final debts = ref.read(debtsListProvider).valueOrNull ?? [];
+              await ref.read(reportRepositoryProvider).deleteReport(
+                    report: report,
+                    existingDebts: debts,
+                  );
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Report deleted from ledger.'),
                   backgroundColor: AppColors.accentError,
                 ),
               );

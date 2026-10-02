@@ -17,6 +17,30 @@ class ReportConfirmationResult {
   });
 }
 
+class ReportUpdateResult {
+  final SwearReport updatedReport;
+  final DebtObligation? updatedDebt;
+  final int swearCountDelta;
+
+  const ReportUpdateResult({
+    required this.updatedReport,
+    this.updatedDebt,
+    required this.swearCountDelta,
+  });
+}
+
+class ReportDeletionResult {
+  final String deletedReportId;
+  final List<String> deletedDebtIds;
+  final int swearCountDelta;
+
+  const ReportDeletionResult({
+    required this.deletedReportId,
+    this.deletedDebtIds = const [],
+    required this.swearCountDelta,
+  });
+}
+
 class LedgerEngine {
   static const _uuid = Uuid();
 
@@ -236,5 +260,99 @@ class LedgerEngine {
       }
       return debt;
     }).toList();
+  }
+
+  /// Audit/update an existing report (count, date, accused member, or note).
+  /// If the report is already confirmed, recalculates and updates its linked debt
+  /// and returns the swear count delta to update totalSwearsAllTime.
+  static ReportUpdateResult updateReport({
+    required SwearReport report,
+    required String accusedId,
+    required int count,
+    required DateTime swearDate,
+    String? note,
+    required List<DebtObligation> existingDebts,
+    DateTime? now,
+  }) {
+    final safeCount = count.clamp(1, 99);
+    final newTotalAmount = calculateTotal(safeCount, report.rateApplied);
+    final trimmedNote = note?.trim();
+
+    final updatedReport = report.copyWith(
+      accusedId: accusedId,
+      count: safeCount,
+      swearDate: swearDate,
+      note: (trimmedNote == null || trimmedNote.isEmpty) ? null : trimmedNote,
+      clearNote: trimmedNote == null || trimmedNote.isEmpty,
+      totalAmount: newTotalAmount,
+    );
+
+    final swearCountDelta = report.isConfirmed ? (safeCount - report.count) : 0;
+
+    DebtObligation? updatedDebt;
+    if (report.isConfirmed) {
+      final matchingIndex =
+          existingDebts.indexWhere((d) => d.reportId == report.id);
+      if (matchingIndex != -1) {
+        final existingDebt = existingDebts[matchingIndex];
+        final paidSoFar =
+            (existingDebt.originalAmount - existingDebt.remainingBalance)
+                .clamp(0.0, double.infinity);
+
+        if (existingDebt.isDismissed) {
+          updatedDebt = existingDebt.copyWith(
+            debtorId: accusedId,
+            originalAmount: newTotalAmount,
+            remainingBalance: 0.0,
+          );
+        } else {
+          final newRemaining =
+              (newTotalAmount - paidSoFar).clamp(0.0, double.infinity);
+          final isNowPaid = newRemaining <= 0.001;
+          final timestamp = now ?? DateTime.now();
+
+          updatedDebt = DebtObligation(
+            id: existingDebt.id,
+            reportId: existingDebt.reportId,
+            debtorId: accusedId,
+            recipientId: existingDebt.recipientId,
+            originalAmount: newTotalAmount,
+            remainingBalance: isNowPaid ? 0.0 : newRemaining,
+            status: isNowPaid ? DebtStatus.paid : DebtStatus.active,
+            isTransferred: existingDebt.isTransferred,
+            transferredFromKeeperId: existingDebt.transferredFromKeeperId,
+            payments: List.from(existingDebt.payments),
+            createdAt: existingDebt.createdAt,
+            resolvedAt:
+                isNowPaid ? (existingDebt.resolvedAt ?? timestamp) : null,
+          );
+        }
+      }
+    }
+
+    return ReportUpdateResult(
+      updatedReport: updatedReport,
+      updatedDebt: updatedDebt,
+      swearCountDelta: swearCountDelta,
+    );
+  }
+
+  /// Delete a report and identify any linked debt obligations and swear count delta to roll back.
+  static ReportDeletionResult deleteReport({
+    required SwearReport report,
+    required List<DebtObligation> existingDebts,
+  }) {
+    final linkedDebtIds = existingDebts
+        .where((d) => d.reportId == report.id)
+        .map((d) => d.id)
+        .toList();
+
+    final swearCountDelta = report.isConfirmed ? -report.count : 0;
+
+    return ReportDeletionResult(
+      deletedReportId: report.id,
+      deletedDebtIds: linkedDebtIds,
+      swearCountDelta: swearCountDelta,
+    );
   }
 }

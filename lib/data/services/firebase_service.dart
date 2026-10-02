@@ -344,7 +344,11 @@ class FirebaseDataService
       final list = snapshot.docs
           .map((doc) => SwearReport.fromMap(doc.data(), id: doc.id))
           .toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      list.sort((a, b) {
+        final cmp = b.swearDate.compareTo(a.swearDate);
+        if (cmp != 0) return cmp;
+        return b.createdAt.compareTo(a.createdAt);
+      });
       return list;
     });
   }
@@ -356,8 +360,10 @@ class FirebaseDataService
     required int count,
     String? note,
     required double rateApplied,
+    DateTime? swearDate,
   }) async {
     final id = _uuid.v4();
+    final now = DateTime.now();
     final report = SwearReport(
       id: id,
       reporterId: reporterId,
@@ -367,7 +373,8 @@ class FirebaseDataService
       rateApplied: rateApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
-      createdAt: DateTime.now(),
+      swearDate: swearDate ?? now,
+      createdAt: now,
     );
 
     await _firestore.collection('reports').doc(id).set(report.toMap());
@@ -450,6 +457,86 @@ class FirebaseDataService
         .set(updated.toMap());
 
     return updated;
+  }
+
+  @override
+  Future<ReportUpdateResult> updateReport({
+    required SwearReport report,
+    required String accusedId,
+    required int count,
+    required DateTime swearDate,
+    String? note,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.updateReport(
+      report: report,
+      accusedId: accusedId,
+      count: count,
+      swearDate: swearDate,
+      note: note,
+      existingDebts: existingDebts,
+    );
+
+    final batch = _firestore.batch();
+
+    batch.set(
+      _firestore.collection('reports').doc(result.updatedReport.id),
+      result.updatedReport.toMap(),
+    );
+
+    if (result.updatedDebt != null) {
+      batch.set(
+        _firestore.collection('debts').doc(result.updatedDebt!.id),
+        result.updatedDebt!.toMap(),
+      );
+    }
+
+    if (result.swearCountDelta != 0) {
+      batch.set(
+        _firestore.collection('config').doc('system'),
+        {
+          'totalSwearsAllTime': FieldValue.increment(result.swearCountDelta),
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+    return result;
+  }
+
+  @override
+  Future<ReportDeletionResult> deleteReport({
+    required SwearReport report,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.deleteReport(
+      report: report,
+      existingDebts: existingDebts,
+    );
+
+    final batch = _firestore.batch();
+
+    batch.delete(_firestore.collection('reports').doc(result.deletedReportId));
+
+    for (final debtId in result.deletedDebtIds) {
+      batch.delete(_firestore.collection('debts').doc(debtId));
+    }
+
+    if (result.swearCountDelta != 0) {
+      batch.set(
+        _firestore.collection('config').doc('system'),
+        {
+          'totalSwearsAllTime': FieldValue.increment(result.swearCountDelta),
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+    return result;
   }
 
   // -------------------------------------------------------------

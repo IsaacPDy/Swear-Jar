@@ -18,6 +18,7 @@ abstract class IReportRepository {
     required int count,
     String? note,
     required double rateApplied,
+    DateTime? swearDate,
   });
   Future<ReportConfirmationResult> confirmReport({
     required SwearReport report,
@@ -29,6 +30,18 @@ abstract class IReportRepository {
     required SwearReport report,
     required String reviewerId,
     String? reason,
+  });
+  Future<ReportUpdateResult> updateReport({
+    required SwearReport report,
+    required String accusedId,
+    required int count,
+    required DateTime swearDate,
+    String? note,
+    required List<DebtObligation> existingDebts,
+  });
+  Future<ReportDeletionResult> deleteReport({
+    required SwearReport report,
+    required List<DebtObligation> existingDebts,
   });
 }
 

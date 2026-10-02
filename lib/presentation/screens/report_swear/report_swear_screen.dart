@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:swear_jar/presentation/theme/app_theme.dart';
 import 'package:swear_jar/presentation/providers/providers.dart';
 import 'package:swear_jar/domain/models/models.dart';
@@ -19,6 +21,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedAccusedId;
   int _swearCount = 1;
+  DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
   bool _isSubmitting = false;
 
@@ -49,6 +52,10 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     super.dispose();
   }
 
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   @override
   Widget build(BuildContext context) {
     final users = ref.watch(approvedUsersProvider);
@@ -67,6 +74,10 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     }
 
     final isKeeperSelected = _selectedAccusedId == keeper?.id;
+    final now = DateTime.now();
+    final isToday = _isSameDay(_selectedDate, now);
+    final isYesterday =
+        _isSameDay(_selectedDate, now.subtract(const Duration(days: 1)));
 
     final jarEmblem = Center(
       child: RotationTransition(
@@ -164,17 +175,136 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       ],
     );
 
-    final swearCountSection = Column(
+    final dateAdjusterSection = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'SWEAR COUNT (1–99)',
+          'DATE OF SWEAR',
           style: GoogleFonts.inter(
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
             color: AppColors.textMuted,
           ),
+        ),
+        const SizedBox(height: 10),
+        NeonCard(
+          padding: const EdgeInsets.all(14),
+          onTap: () => _pickDate(context),
+          borderColor: !isToday
+              ? AppColors.accentPrimary.withValues(alpha: 0.45)
+              : AppColors.borderDefault,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentPrimary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                      color: AppColors.accentPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isToday
+                              ? 'Today (${DateFormat.yMMMd().format(_selectedDate)})'
+                              : isYesterday
+                                  ? 'Yesterday (${DateFormat.yMMMd().format(_selectedDate)})'
+                                  : DateFormat.yMMMMEEEEd()
+                                      .format(_selectedDate),
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tap to choose when the swear happened',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.edit_calendar_outlined,
+                    size: 18,
+                    color: AppColors.accentPrimary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildDateChip(
+                    label: 'Today',
+                    selected: isToday,
+                    onTap: () => setState(() => _selectedDate = DateTime.now()),
+                  ),
+                  _buildDateChip(
+                    label: 'Yesterday',
+                    selected: isYesterday,
+                    onTap: () => setState(() {
+                      final y =
+                          DateTime.now().subtract(const Duration(days: 1));
+                      _selectedDate =
+                          DateTime(y.year, y.month, y.day, y.hour, y.minute);
+                    }),
+                  ),
+                  _buildDateChip(
+                    label: 'Pick Date...',
+                    selected: !isToday && !isYesterday,
+                    icon: Icons.calendar_month_outlined,
+                    onTap: () => _pickDate(context),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final swearCountSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'SWEAR COUNT (1–99)',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+                color: AppColors.textMuted,
+              ),
+            ),
+            Text(
+              'Tap number to type',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.accentPrimary,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         NeonCard(
@@ -192,23 +322,46 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                     color: AppColors.accentPrimary,
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 88),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSurfaceElevated,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _showCustomCountDialog(context),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderDefault),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$_swearCount',
-                      style: GoogleFonts.outfit(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 96),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgSurfaceElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color:
+                                AppColors.accentPrimary.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$_swearCount',
+                              style: GoogleFonts.outfit(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.edit_outlined,
+                              size: 15,
+                              color: AppColors.accentPrimary,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -380,6 +533,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                           children: [
                             accusedSection,
                             const SizedBox(height: 24),
+                            dateAdjusterSection,
+                            const SizedBox(height: 24),
                             noteSection,
                           ],
                         ),
@@ -409,6 +564,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                       const SizedBox(height: 24),
                       accusedSection,
                       const SizedBox(height: 24),
+                      dateAdjusterSection,
+                      const SizedBox(height: 24),
                       swearCountSection,
                       const SizedBox(height: 24),
                       noteSection,
@@ -420,6 +577,184 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDateChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.accentPrimary.withValues(alpha: 0.16)
+              : AppColors.bgSurfaceElevated,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? AppColors.accentPrimary : AppColors.borderDefault,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 13,
+                color:
+                    selected ? AppColors.accentPrimary : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate.isAfter(now) ? now : _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.accentPrimary,
+              onPrimary: Colors.white,
+              surface: AppColors.bgSurface,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.bgSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          now.hour,
+          now.minute,
+        );
+      });
+    }
+  }
+
+  void _showCustomCountDialog(BuildContext context) {
+    final controller = TextEditingController(text: '$_swearCount');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.borderDefault),
+        ),
+        title: Text(
+          'Enter Swear Count',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter the number of swears (1–99):',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                style: GoogleFonts.outfit(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: AppColors.bgSurfaceElevated,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.borderDefault),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.accentPrimary),
+                  ),
+                ),
+                onSubmitted: (val) {
+                  final parsed = int.tryParse(val.trim());
+                  if (parsed != null && parsed >= 1) {
+                    setState(() => _swearCount = parsed.clamp(1, 99));
+                  }
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(color: AppColors.textMuted),
+            ),
+          ),
+          NeonButton(
+            label: 'Set Count',
+            type: NeonButtonType.primary,
+            onPressed: () {
+              final parsed = int.tryParse(controller.text.trim());
+              if (parsed != null && parsed >= 1) {
+                setState(() => _swearCount = parsed.clamp(1, 99));
+              }
+              Navigator.pop(ctx);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -525,6 +860,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
           count: _swearCount,
           note: note.isEmpty ? null : note,
           rateApplied: currentRate,
+          swearDate: _selectedDate,
         );
 
     setState(() => _isSubmitting = false);
@@ -537,7 +873,10 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
         ),
       );
       _noteController.clear();
-      setState(() => _swearCount = 1);
+      setState(() {
+        _swearCount = 1;
+        _selectedDate = DateTime.now();
+      });
       widget.onReportSubmitted?.call();
     }
   }

@@ -35,41 +35,54 @@ class HomeScreen extends ConsumerWidget {
 
     final greetingHeader = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
+                (config?.groupName ?? 'SWEAR JAR').toUpperCase(),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                  color: AppColors.accentGoldMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
                 'Welcome, ${currentUser.displayName}',
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  fontSize: isDesktop ? 22 : 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: isDesktop ? 30 : 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   if (isKeeper) ...[
                     const Icon(
                       Icons.shield_outlined,
-                      size: 13,
+                      size: 14,
                       color: AppColors.accentPrimary,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                   ],
                   Flexible(
                     child: Text(
-                      isKeeper ? 'Active Group Keeper' : 'Member',
+                      isKeeper
+                          ? 'Active Group Keeper • Manage reports and ledger balances.'
+                          : 'Track your personal jar balance and active obligations.',
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
-                        fontSize: 13,
+                        fontSize: 13.5,
                         color: isKeeper
                             ? AppColors.accentPrimary
-                            : AppColors.textMuted,
+                            : AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -80,7 +93,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: 12),
-        UserAvatar(user: currentUser, size: 42),
+        UserAvatar(user: currentUser, size: 46, showBadge: true),
       ],
     );
 
@@ -126,80 +139,76 @@ class HomeScreen extends ConsumerWidget {
     final obligationsSection = _buildObligationsSection(myDebts);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(Icons.account_balance_wallet_outlined, color: AppColors.accentPrimary, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              config?.groupName ?? 'Swear Jar',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 18),
-            ),
-          ],
-        ),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 1120 : 600),
-          child: isDesktop
-              ? ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(child: greetingHeader),
-                        const SizedBox(width: 24),
-                        SizedBox(width: 360, child: actionButtons),
-                      ],
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 1140 : 600),
+            child: isDesktop
+                ? ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 28,
                     ),
-                    const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              balanceCard,
-                              const SizedBox(height: 16),
-                              keeperInfoCard,
-                              if (transferredBountyCard != null) ...[
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: greetingHeader),
+                          const SizedBox(width: 24),
+                          SizedBox(width: 360, child: actionButtons),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                balanceCard,
                                 const SizedBox(height: 16),
-                                transferredBountyCard,
+                                keeperInfoCard,
+                                if (transferredBountyCard != null) ...[
+                                  const SizedBox(height: 16),
+                                  transferredBountyCard,
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 6,
-                          child: obligationsSection,
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              : ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  children: [
-                    greetingHeader,
-                    const SizedBox(height: 16),
-                    keeperInfoCard,
-                    const SizedBox(height: 16),
-                    balanceCard,
-                    if (transferredBountyCard != null) ...[
-                      const SizedBox(height: 16),
-                      transferredBountyCard,
+                          const SizedBox(width: 24),
+                          Expanded(
+                            flex: 6,
+                            child: obligationsSection,
+                          ),
+                        ],
+                      ),
                     ],
-                    const SizedBox(height: 24),
-                    actionButtons,
-                    const SizedBox(height: 28),
-                    obligationsSection,
-                  ],
-                ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    children: [
+                      greetingHeader,
+                      const SizedBox(height: 18),
+                      keeperInfoCard,
+                      const SizedBox(height: 16),
+                      balanceCard,
+                      if (transferredBountyCard != null) ...[
+                        const SizedBox(height: 16),
+                        transferredBountyCard,
+                      ],
+                      const SizedBox(height: 20),
+                      actionButtons,
+                      const SizedBox(height: 26),
+                      obligationsSection,
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -216,20 +225,20 @@ class HomeScreen extends ConsumerWidget {
           keeper.gcashNumber != null &&
           keeper.gcashNumber!.trim().isNotEmpty) {
         return NeonCard(
-          padding: const EdgeInsets.all(16),
-          borderColor: AppColors.accentInfo.withValues(alpha: 0.3),
+          padding: const EdgeInsets.all(18),
+          borderColor: AppColors.accentMint.withValues(alpha: 0.32),
           backgroundColor: AppColors.bgSurface,
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.accentInfo.withValues(alpha: 0.12),
+                  color: AppColors.accentMint.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
                   Icons.account_balance_wallet_outlined,
-                  color: AppColors.accentInfo,
+                  color: AppColors.accentMint,
                   size: 20,
                 ),
               ),
@@ -244,9 +253,9 @@ class HomeScreen extends ConsumerWidget {
                           'JAR KEEPER GCASH',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.8,
-                            color: AppColors.accentInfo,
+                            color: AppColors.accentMint,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -266,9 +275,9 @@ class HomeScreen extends ConsumerWidget {
                     const SizedBox(height: 4),
                     SelectableText(
                       keeper.gcashNumber!,
-                      style: GoogleFonts.outfit(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                         letterSpacing: 0.3,
                       ),
@@ -278,9 +287,13 @@ class HomeScreen extends ConsumerWidget {
               ),
               IconButton(
                 tooltip: 'Copy GCash Number',
-                icon: const Icon(Icons.copy_rounded, color: AppColors.accentInfo, size: 18),
+                icon: const Icon(
+                  Icons.copy_rounded,
+                  color: AppColors.accentMint,
+                  size: 18,
+                ),
                 style: IconButton.styleFrom(
-                  backgroundColor: AppColors.accentInfo.withValues(alpha: 0.1),
+                  backgroundColor: AppColors.accentMint.withValues(alpha: 0.12),
                   padding: const EdgeInsets.all(8),
                 ),
                 onPressed: () {
@@ -289,13 +302,19 @@ class HomeScreen extends ConsumerWidget {
                     SnackBar(
                       content: Row(
                         children: [
-                          const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                          const Icon(
+                            Icons.check_circle_outline,
+                            color: AppColors.onAccentPrimary,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
-                          Text('Copied GCash: ${keeper.gcashNumber} to clipboard!'),
+                          Text(
+                            'Copied GCash: ${keeper.gcashNumber} to clipboard!',
+                          ),
                         ],
                       ),
                       duration: const Duration(seconds: 2),
-                      backgroundColor: AppColors.accentInfo,
+                      backgroundColor: AppColors.accentMint,
                     ),
                   );
                 },
@@ -305,7 +324,7 @@ class HomeScreen extends ConsumerWidget {
         );
       } else if (keeper != null) {
         return NeonCard(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           borderColor: AppColors.borderDefault,
           backgroundColor: AppColors.bgSurface,
           child: Row(
@@ -313,12 +332,12 @@ class HomeScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.accentWarning.withValues(alpha: 0.12),
+                  color: AppColors.accentPrimary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
                   Icons.phone_android_outlined,
-                  color: AppColors.accentWarning,
+                  color: AppColors.accentPrimary,
                   size: 20,
                 ),
               ),
@@ -331,7 +350,7 @@ class HomeScreen extends ConsumerWidget {
                       'JAR KEEPER: ${keeper.displayName}',
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 0.8,
                         color: AppColors.textPrimary,
                       ),
@@ -339,7 +358,10 @@ class HomeScreen extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Text(
                       'Keeper has not registered a GCash number yet.',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -349,7 +371,7 @@ class HomeScreen extends ConsumerWidget {
         );
       } else {
         return NeonCard(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           borderColor: AppColors.borderDefault,
           backgroundColor: AppColors.bgSurface,
           child: Row(
@@ -370,7 +392,10 @@ class HomeScreen extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'No Jar Keeper is currently appointed.',
-                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -380,9 +405,9 @@ class HomeScreen extends ConsumerWidget {
     } else {
       final hasGcash = currentUser.gcashNumber?.isNotEmpty ?? false;
       return NeonCard(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         borderColor: hasGcash
-            ? AppColors.accentPrimary.withValues(alpha: 0.3)
+            ? AppColors.accentPrimary.withValues(alpha: 0.35)
             : AppColors.accentWarning.withValues(alpha: 0.4),
         backgroundColor: AppColors.bgSurface,
         child: Row(
@@ -391,13 +416,15 @@ class HomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: hasGcash
-                    ? AppColors.accentPrimary.withValues(alpha: 0.12)
-                    : AppColors.accentWarning.withValues(alpha: 0.12),
+                    ? AppColors.accentPrimary.withValues(alpha: 0.14)
+                    : AppColors.accentWarning.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 Icons.account_balance_wallet_outlined,
-                color: hasGcash ? AppColors.accentPrimary : AppColors.accentWarning,
+                color: hasGcash
+                    ? AppColors.accentPrimary
+                    : AppColors.accentWarning,
                 size: 20,
               ),
             ),
@@ -410,9 +437,11 @@ class HomeScreen extends ConsumerWidget {
                     'YOUR KEEPER GCASH (Visible to Members)',
                     style: GoogleFonts.inter(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.8,
-                      color: hasGcash ? AppColors.accentPrimary : AppColors.accentWarning,
+                      color: hasGcash
+                          ? AppColors.accentPrimary
+                          : AppColors.accentWarning,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -423,7 +452,9 @@ class HomeScreen extends ConsumerWidget {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: hasGcash ? AppColors.textPrimary : AppColors.accentWarning,
+                      color: hasGcash
+                          ? AppColors.textPrimary
+                          : AppColors.accentWarning,
                     ),
                   ),
                 ],
@@ -445,7 +476,7 @@ class HomeScreen extends ConsumerWidget {
       borderColor: myTotalDebt > 0
           ? AppColors.accentPrimary.withValues(alpha: 0.4)
           : AppColors.borderDefault,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -458,9 +489,9 @@ class HomeScreen extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
                     fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
-                    color: AppColors.textMuted,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -468,13 +499,13 @@ class HomeScreen extends ConsumerWidget {
               if (myTotalDebt > 0)
                 const StatusPill(
                   label: 'Obligation Active',
-                  color: AppColors.accentWarning,
+                  color: AppColors.accentPrimary,
                   icon: Icons.pending_outlined,
                 )
               else
                 const StatusPill(
                   label: 'All Settled',
-                  color: AppColors.accentSuccess,
+                  color: AppColors.accentMint,
                   icon: Icons.check_circle_outline,
                 ),
             ],
@@ -482,27 +513,37 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           CurrencyText(
             amount: myTotalDebt,
-            fontSize: 36,
-            fontWeight: FontWeight.w700,
-            color: myTotalDebt > 0 ? Colors.white : AppColors.accentSuccess,
+            fontSize: 38,
+            fontWeight: FontWeight.w800,
+            color: myTotalDebt > 0 ? Colors.white : AppColors.accentMint,
           ),
           const SizedBox(height: 14),
           const Divider(color: AppColors.borderDefault, height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (myTotalDebt > 0 && keeper != null) ...[
             Row(
               children: [
-                const Icon(Icons.arrow_outward, size: 15, color: AppColors.textSecondary),
+                const Icon(
+                  Icons.arrow_outward,
+                  size: 15,
+                  color: AppColors.accentPrimary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: RichText(
                     text: TextSpan(
-                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
                       children: [
                         const TextSpan(text: 'Payable to: '),
                         TextSpan(
                           text: keeper.displayName,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                         const TextSpan(text: ' (Keeper)'),
                       ],
@@ -511,14 +552,17 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            if (keeper.gcashNumber != null && keeper.gcashNumber!.isNotEmpty) ...[
+            if (keeper.gcashNumber != null &&
+                keeper.gcashNumber!.isNotEmpty) ...[
               const SizedBox(height: 10),
               InkWell(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: keeper.gcashNumber!));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Copied GCash: ${keeper.gcashNumber} to clipboard!'),
+                      content: Text(
+                        'Copied GCash: ${keeper.gcashNumber} to clipboard!',
+                      ),
                       duration: const Duration(seconds: 2),
                       backgroundColor: AppColors.accentPrimary,
                     ),
@@ -526,16 +570,25 @@ class HomeScreen extends ConsumerWidget {
                 },
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.bgSurfaceElevated,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.accentInfo.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: AppColors.accentMint.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.phone_android_outlined, size: 14, color: AppColors.accentInfo),
+                      const Icon(
+                        Icons.phone_android_outlined,
+                        size: 14,
+                        color: AppColors.accentMint,
+                      ),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
@@ -544,12 +597,16 @@ class HomeScreen extends ConsumerWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.accentInfo,
+                            color: AppColors.accentMint,
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.copy_rounded, size: 12, color: AppColors.textMuted),
+                      const Icon(
+                        Icons.copy_rounded,
+                        size: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ],
                   ),
                 ),
@@ -558,12 +615,20 @@ class HomeScreen extends ConsumerWidget {
           ] else ...[
             Row(
               children: [
-                const Icon(Icons.verified_outlined, size: 16, color: AppColors.accentSuccess),
+                const Icon(
+                  Icons.verified_outlined,
+                  size: 16,
+                  color: AppColors.accentMint,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'You do not owe any money right now.',
-                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.accentSuccess),
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.accentMint,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -588,7 +653,11 @@ class HomeScreen extends ConsumerWidget {
               color: AppColors.accentPrimary.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.swap_horiz_rounded, color: AppColors.accentPrimary, size: 22),
+            child: const Icon(
+              Icons.swap_horiz_rounded,
+              color: AppColors.accentPrimary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -597,8 +666,8 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Text(
                   'Keeper Swear Bounty Active',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w600,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                     fontSize: 15,
                   ),
@@ -628,39 +697,46 @@ class HomeScreen extends ConsumerWidget {
           'YOUR ACTIVE OBLIGATIONS',
           style: GoogleFonts.inter(
             fontSize: 11.5,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.8,
-            color: AppColors.textMuted,
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 12),
         if (myDebts.isEmpty)
           NeonCard(
-            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
             child: Center(
               child: Column(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.accentSuccess.withValues(alpha: 0.1),
+                      color: AppColors.accentMint.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check_circle_outline, size: 28, color: AppColors.accentSuccess),
+                    child: const Icon(
+                      Icons.check_circle_outline,
+                      size: 28,
+                      color: AppColors.accentMint,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Clean Record',
-                    style: GoogleFonts.outfit(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'No pending debts or swear obligations.',
-                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.textMuted),
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -678,10 +754,14 @@ class HomeScreen extends ConsumerWidget {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: AppColors.bgSurfaceElevated,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderSubtle),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderDefault),
                       ),
-                      child: const Icon(Icons.receipt_long_outlined, color: AppColors.accentWarning, size: 20),
+                      child: const Icon(
+                        Icons.receipt_long_outlined,
+                        color: AppColors.accentPrimary,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -689,17 +769,22 @@ class HomeScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            debt.isTransferred ? 'Transferred Penalty' : 'Swear Penalty',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
+                            debt.isTransferred
+                                ? 'Transferred Penalty'
+                                : 'Swear Penalty',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
-                              fontSize: 14,
+                              fontSize: 14.5,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Original: ₱${debt.originalAmount.toStringAsFixed(0)}',
-                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
@@ -713,7 +798,10 @@ class HomeScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w700,
                         ),
                         const SizedBox(height: 4),
-                        StatusPill.fromDebt(debt.status, isTransferred: debt.isTransferred),
+                        StatusPill.fromDebt(
+                          debt.status,
+                          isTransferred: debt.isTransferred,
+                        ),
                       ],
                     ),
                   ],
@@ -724,4 +812,3 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 }
-

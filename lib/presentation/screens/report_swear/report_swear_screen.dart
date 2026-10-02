@@ -23,8 +23,10 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
   int _swearCount = 1;
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
+  final FocusNode _noteFocusNode = FocusNode();
   final Map<String, int> _selectedSwearCounts = {};
-  String _selectedLanguageId = 'all';
+  String _selectedLanguageId = 'english';
+  bool _showCustomNoteField = false;
   bool _isSubmitting = false;
 
   late AnimationController _shakeController;
@@ -80,24 +82,48 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       duration: const Duration(milliseconds: 350),
     );
     _shakeAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.08), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -0.08, end: 0.08), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 0.08, end: -0.05), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 0.05, end: 0.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.06), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.06, end: 0.06), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 0.06, end: -0.04), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -0.04, end: 0.04), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 0.04, end: 0.0), weight: 1),
     ]).animate(
-        CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut));
+      CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut),
+    );
+    _noteController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _shakeController.dispose();
     _noteController.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _cleanDisplayName(AppUser user) {
+    final base = user.displayName.split('(').first.trim();
+    return base.isNotEmpty ? base : user.displayName;
+  }
+
+  String _previewQuoteText() {
+    if (_selectedSwearCounts.isNotEmpty) {
+      final joined = _selectedSwearCounts.entries
+          .map((e) => e.value > 1 ? '${e.key} ×${e.value}' : e.key)
+          .join(', ');
+      return '"$joined"';
+    }
+    final note = _noteController.text.trim();
+    if (note.isNotEmpty) {
+      return '"$note"';
+    }
+    return '"Unspecified swear"';
   }
 
   @override
@@ -111,17 +137,27 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     final swearLanguages = config?.swearLanguages ?? const <SwearLanguage>[];
     if (_selectedLanguageId != 'all' &&
         !swearLanguages.any((l) => l.id == _selectedLanguageId)) {
-      _selectedLanguageId = 'all';
+      _selectedLanguageId =
+          swearLanguages.isNotEmpty ? swearLanguages.first.id : 'all';
     }
 
     final currentRate = config?.currentRatePerSwear ?? 50.0;
     final totalConsequence = _swearCount * currentRate;
 
     if (_selectedAccusedId == null && users.isNotEmpty) {
-      final other = users.firstWhere((u) => u.id != currentUser?.id,
-          orElse: () => users.first);
+      final other = users.firstWhere(
+        (u) => u.id != currentUser?.id,
+        orElse: () => users.first,
+      );
       _selectedAccusedId = other.id;
     }
+
+    final selectedAccusedUser = users.isNotEmpty
+        ? users.firstWhere(
+            (u) => u.id == _selectedAccusedId,
+            orElse: () => users.first,
+          )
+        : currentUser;
 
     final isKeeperSelected = _selectedAccusedId == keeper?.id;
     final now = DateTime.now();
@@ -129,70 +165,110 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     final isYesterday =
         _isSameDay(_selectedDate, now.subtract(const Duration(days: 1)));
 
-    final jarEmblem = Center(
-      child: RotationTransition(
-        turns: _shakeAnimation,
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: AppColors.bgSurface,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppColors.accentPrimary.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: AppColors.accentGlow,
-                blurRadius: 16,
+    // Top Header matching reference image ("REPORT" overline + "Report a Swear" + subtitle + tilted Swear Jar with coins & sparkles)
+    final pageHeader = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'REPORT',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                  color: AppColors.accentGoldMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Report a Swear',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: isDesktop ? 32 : 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.6,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Log the incident and add it to the ledger.',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
-          child: const Icon(
-            Icons.account_balance_wallet_outlined,
-            size: 40,
-            color: AppColors.accentPrimary,
+        ),
+        const SizedBox(width: 12),
+        RotationTransition(
+          turns: _shakeAnimation,
+          child: SwearJarHeroIllustration(
+            width: isDesktop ? 136 : 104,
+            height: isDesktop ? 92 : 76,
           ),
         ),
-      ),
+      ],
     );
 
-    final accusedSection = Column(
+    // STEP 1: Who swore?
+    final step1WhoSwore = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'WHO COMMITTED THE SWEAR?',
-          style: GoogleFonts.inter(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-            color: AppColors.textMuted,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const StepNumberBadge(number: 1, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Who swore?',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Select the person who said it.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        if (isDesktop)
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final user in users)
-                _buildUserSelectorTile(user, currentUser, isDesktop: true),
-            ],
-          )
-        else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = isDesktop ? 5 : 3;
+            const spacing = 10.0;
+            final tileWidth =
+                (constraints.maxWidth - spacing * (cols - 1)) / cols;
+
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
               children: [
                 for (final user in users)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12.0),
-                    child: _buildUserSelectorTile(user, currentUser,
-                        isDesktop: false),
+                  SizedBox(
+                    width: tileWidth.clamp(86.0, 160.0),
+                    child: _buildUserSelectorTile(user, currentUser),
                   ),
               ],
-            ),
-          ),
+            );
+          },
+        ),
         if (isKeeperSelected) ...[
           const SizedBox(height: 12),
           Container(
@@ -201,12 +277,16 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
               color: AppColors.accentPrimary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: AppColors.accentPrimary.withValues(alpha: 0.35)),
+                color: AppColors.accentPrimary.withValues(alpha: 0.35),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.swap_horiz_rounded,
-                    color: AppColors.accentPrimary, size: 18),
+                const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: AppColors.accentPrimary,
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -225,298 +305,299 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       ],
     );
 
-    final dateAdjusterSection = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'DATE OF SWEAR',
-          style: GoogleFonts.inter(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-            color: AppColors.textMuted,
-          ),
-        ),
-        const SizedBox(height: 10),
-        NeonCard(
-          padding: const EdgeInsets.all(14),
-          onTap: () => _pickDate(context),
-          borderColor: !isToday
-              ? AppColors.accentPrimary.withValues(alpha: 0.45)
-              : AppColors.borderDefault,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentPrimary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 18,
-                      color: AppColors.accentPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isToday
-                              ? 'Today (${DateFormat.yMMMd().format(_selectedDate)})'
-                              : isYesterday
-                                  ? 'Yesterday (${DateFormat.yMMMd().format(_selectedDate)})'
-                                  : DateFormat.yMMMMEEEEd()
-                                      .format(_selectedDate),
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Tap to choose when the swear happened',
-                          style: GoogleFonts.inter(
-                            fontSize: 11.5,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.edit_calendar_outlined,
-                    size: 18,
-                    color: AppColors.accentPrimary,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildDateChip(
-                    label: 'Today',
-                    selected: isToday,
-                    onTap: () => setState(() => _selectedDate = DateTime.now()),
-                  ),
-                  _buildDateChip(
-                    label: 'Yesterday',
-                    selected: isYesterday,
-                    onTap: () => setState(() {
-                      final y =
-                          DateTime.now().subtract(const Duration(days: 1));
-                      _selectedDate =
-                          DateTime(y.year, y.month, y.day, y.hour, y.minute);
-                    }),
-                  ),
-                  _buildDateChip(
-                    label: 'Pick Date...',
-                    selected: !isToday && !isYesterday,
-                    icon: Icons.calendar_month_outlined,
-                    onTap: () => _pickDate(context),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    final swearCountSection = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'SWEAR COUNT (1–99)',
-              style: GoogleFonts.inter(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
-                color: AppColors.textMuted,
-              ),
-            ),
-            Text(
-              'Tap number to type',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.accentPrimary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        NeonCard(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: _swearCount > _minSwearCount
-                        ? () => setState(() => _swearCount--)
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline, size: 30),
-                    color: AppColors.accentPrimary,
-                  ),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _showCustomCountDialog(context),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 96),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgSurfaceElevated,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color:
-                                AppColors.accentPrimary.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '$_swearCount',
-                          style: GoogleFonts.outfit(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures()
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _swearCount < 99
-                        ? () => setState(() => _swearCount++)
-                        : null,
-                    icon: const Icon(Icons.add_circle_outline, size: 30),
-                    color: AppColors.accentPrimary,
-                  ),
-                ],
-              ),
-              if (_templateSwearsTotal > 0) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Minimum $_templateSwearsTotal from selected swear templates'
-                  '${_swearCount > _templateSwearsTotal ? " (+${_swearCount - _templateSwearsTotal} extra)" : ""}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: AppColors.accentPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildQuickButton('+1', () => _setCountOffset(1)),
-                  _buildQuickButton('+2', () => _setCountOffset(2)),
-                  _buildQuickButton('+5', () => _setCountOffset(5)),
-                  _buildQuickButton(
-                      'Max (99)', () => setState(() => _swearCount = 99)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    final noteSection = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'NOTE / CONTEXT (OPTIONAL)',
-          style: GoogleFonts.inter(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-            color: AppColors.textMuted,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _noteController,
-          maxLength: 120,
-          maxLines: isDesktop ? 3 : 1,
-          decoration: InputDecoration(
-            hintText: 'e.g., Screamed during Mario Kart tournament...',
-            hintStyle:
-                GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13.5),
-            filled: true,
-            fillColor: AppColors.bgSurface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderDefault),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderDefault),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.accentPrimary),
-            ),
-          ),
-          style:
-              GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 13.5),
-        ),
-      ],
-    );
-
+    // STEP 2: Which word did they say?
     final visibleLanguages = _selectedLanguageId == 'all'
         ? swearLanguages
         : swearLanguages.where((l) => l.id == _selectedLanguageId).toList();
 
-    final swearTemplatesSection = Column(
+    final activeLangName = _selectedLanguageId == 'all'
+        ? 'All Languages'
+        : (swearLanguages
+                .where((l) => l.id == _selectedLanguageId)
+                .firstOrNull
+                ?.name ??
+            'English');
+
+    final step2WhichWord = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.translate_rounded,
-                  size: 16,
-                  color: AppColors.accentPrimary,
+            const StepNumberBadge(number: 2, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Which word did they say?',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Select from the list of swears.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (swearLanguages.isNotEmpty)
+              PopupMenuButton<String>(
+                tooltip: 'Select language',
+                color: AppColors.bgSurfaceElevated,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: AppColors.borderDefault),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  'SWEAR TEMPLATES (OPTIONAL)',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                    color: AppColors.textMuted,
+                onSelected: (val) => setState(() => _selectedLanguageId = val),
+                itemBuilder: (context) => [
+                  for (final lang in swearLanguages)
+                    PopupMenuItem<String>(
+                      value: lang.id,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.language_rounded,
+                            size: 16,
+                            color: _selectedLanguageId == lang.id
+                                ? AppColors.accentMint
+                                : AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            lang.name,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: _selectedLanguageId == lang.id
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (swearLanguages.length > 1)
+                    PopupMenuItem<String>(
+                      value: 'all',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.apps_rounded,
+                            size: 16,
+                            color: _selectedLanguageId == 'all'
+                                ? AppColors.accentMint
+                                : AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'All Languages',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: _selectedLanguageId == 'all'
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurfaceElevated,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.borderDefault),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.language_rounded,
+                        size: 16,
+                        color: AppColors.accentMint,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        activeLangName,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: AppColors.textPrimary,
+                      ),
+                    ],
                   ),
                 ),
+              ),
+          ],
+        ),
+        // When additional custom languages (>2) are configured by Admin, also show quick language tabs
+        if (swearLanguages.length > 2) ...[
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: _buildDateChip(
+                    label: 'All',
+                    selected: _selectedLanguageId == 'all',
+                    onTap: () => setState(() => _selectedLanguageId = 'all'),
+                  ),
+                ),
+                for (final lang in swearLanguages)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: _buildDateChip(
+                      label: lang.name,
+                      selected: _selectedLanguageId == lang.id,
+                      onTap: () =>
+                          setState(() => _selectedLanguageId = lang.id),
+                    ),
+                  ),
               ],
             ),
-            if (_templateSwearsTotal > 0)
+          ),
+        ],
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = isDesktop ? 5 : 3;
+            const spacing = 10.0;
+            final tileWidth =
+                (constraints.maxWidth - spacing * (cols - 1)) / cols;
+
+            final allVisibleSwears = <String>[];
+            for (final lang in visibleLanguages) {
+              for (final s in lang.swears) {
+                if (!allVisibleSwears.contains(s)) {
+                  allVisibleSwears.add(s);
+                }
+              }
+            }
+
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (final swear in allVisibleSwears)
+                  SizedBox(
+                    width: tileWidth.clamp(84.0, 180.0),
+                    child: _buildSwearGridTile(swear),
+                  ),
+                SizedBox(
+                  width: tileWidth.clamp(84.0, 180.0),
+                  child: _buildOtherTile(),
+                ),
+              ],
+            );
+          },
+        ),
+        if (_selectedSwearCounts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Selected:',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    for (final entry in _selectedSwearCounts.entries)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentPrimary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color:
+                                AppColors.accentPrimary.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              onTap: () =>
+                                  _adjustTemplateSwearCount(entry.key, -1),
+                              borderRadius: BorderRadius.circular(4),
+                              child: const Padding(
+                                padding: EdgeInsets.all(2.0),
+                                child: Icon(
+                                  Icons.remove_rounded,
+                                  size: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: _swearCount < 99
+                                  ? () =>
+                                      _adjustTemplateSwearCount(entry.key, 1)
+                                  : null,
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4.0, vertical: 1.0),
+                                child: Text(
+                                  '${entry.key} ×${entry.value}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.accentPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: _swearCount < 99
+                                  ? () =>
+                                      _adjustTemplateSwearCount(entry.key, 1)
+                                  : null,
+                              borderRadius: BorderRadius.circular(4),
+                              child: const Padding(
+                                padding: EdgeInsets.all(2.0),
+                                child: Icon(
+                                  Icons.add_rounded,
+                                  size: 13,
+                                  color: AppColors.accentPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               InkWell(
                 onTap: _clearTemplateSwears,
                 borderRadius: BorderRadius.circular(6),
@@ -533,382 +614,693 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   ),
                 ),
               ),
+            ],
+          ),
+        ],
+        if (_showCustomNoteField || _noteController.text.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _noteController,
+            focusNode: _noteFocusNode,
+            maxLength: 120,
+            maxLines: 1,
+            decoration: InputDecoration(
+              hintText:
+                  'Type custom word or incident note (e.g., Mario Kart rage)...',
+              hintStyle: GoogleFonts.inter(
+                  color: AppColors.textMuted, fontSize: 13),
+              counterText: '',
+              filled: true,
+              fillColor: AppColors.bgSurfaceElevated,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.borderDefault),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.borderDefault),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.accentPrimary),
+              ),
+              suffixIcon: _noteController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded,
+                          size: 16, color: AppColors.textMuted),
+                      onPressed: () {
+                        _noteController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+            ),
+            style:
+                GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 13.5),
+          ),
+        ],
+      ],
+    );
+
+    // STEP 3: When did it happen?
+    final formattedDateLabel = isToday
+        ? 'Today (${DateFormat.yMMMd().format(_selectedDate)})'
+        : isYesterday
+            ? 'Yesterday (${DateFormat.yMMMd().format(_selectedDate)})'
+            : DateFormat.yMMMd().format(_selectedDate);
+
+    final step3WhenDidItHappen = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const StepNumberBadge(number: 3, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'When did it happen?',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Select the date.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 8),
-        NeonCard(
-          padding: const EdgeInsets.all(14),
-          child: swearLanguages.isEmpty
-              ? Text(
-                  'No swear templates configured yet. An Admin can add languages and swears in the Admin Console.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    color: AppColors.textMuted,
+        const SizedBox(height: 12),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _pickDate(context),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceSubtle,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: !isToday
+                      ? AppColors.accentPrimary.withValues(alpha: 0.45)
+                      : AppColors.borderDefault,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 18,
+                    color: AppColors.accentPrimary,
                   ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          if (swearLanguages.length > 1)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: _buildDateChip(
-                                label: 'All',
-                                selected: _selectedLanguageId == 'all',
-                                icon: Icons.apps_rounded,
-                                onTap: () => setState(
-                                    () => _selectedLanguageId = 'all'),
-                              ),
-                            ),
-                          for (final lang in swearLanguages)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: _buildDateChip(
-                                label: lang.name,
-                                selected: _selectedLanguageId == lang.id,
-                                icon: Icons.language_rounded,
-                                onTap: () => setState(
-                                    () => _selectedLanguageId = lang.id),
-                              ),
-                            ),
-                        ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      formattedDateLabel,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    if (visibleLanguages.every((l) => l.swears.isEmpty))
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: Text(
-                          _selectedLanguageId == 'all'
-                              ? 'No swears added to your languages yet. Add swears inside your language in the Admin Console.'
-                              : 'No swears added to ${visibleLanguages.firstOrNull?.name ?? "this language"} yet.',
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            color: AppColors.textMuted,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      )
-                    else
-                      for (int i = 0; i < visibleLanguages.length; i++) ...[
-                        if (visibleLanguages[i].swears.isNotEmpty) ...[
-                          if (_selectedLanguageId == 'all' &&
-                              swearLanguages.length > 1) ...[
-                            if (i > 0) const SizedBox(height: 10),
-                            Text(
-                              visibleLanguages[i].name.toUpperCase(),
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.6,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                          ],
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final swear in visibleLanguages[i].swears)
-                                _buildSwearTemplateCounterChip(swear),
-                            ],
-                          ),
-                        ],
-                      ],
-                    if (_selectedSwearCounts.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      const Divider(color: AppColors.borderDefault, height: 1),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Selected:',
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          for (final entry in _selectedSwearCounts.entries)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentPrimary
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: AppColors.accentPrimary
-                                      .withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Text(
-                                '${entry.key} ×${entry.value}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: AppColors.textPrimary,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
 
-    final summaryCard = NeonCard(
-      backgroundColor: AppColors.bgSurface,
-      borderColor: AppColors.accentPrimary.withValues(alpha: 0.3),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'CONSEQUENCE RATE',
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '₱${currentRate.toStringAsFixed(0)} / swear',
-                  style: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'TOTAL OBLIGATION',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.6,
-                  color: AppColors.accentPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              CurrencyText(
-                amount: totalConsequence,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
     final submitButton = NeonButton(
-      label: 'Submit Swear to Jar',
+      label: 'Add to Ledger',
       icon: Icons.send_rounded,
       type: NeonButtonType.primary,
       width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       isLoading: _isSubmitting,
       onPressed: _selectedAccusedId == null
           ? null
           : () => _handleSubmit(currentUser, currentRate),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Report a Swear',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 18),
-        ),
+    final mainLeftStepsCard = NeonCard(
+      padding: EdgeInsets.all(isDesktop ? 24 : 18),
+      borderRadius: 16,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          step1WhoSwore,
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Divider(height: 1, color: AppColors.borderDefault),
+          ),
+          step2WhichWord,
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Divider(height: 1, color: AppColors.borderDefault),
+          ),
+          step3WhenDidItHappen,
+          const SizedBox(height: 22),
+          submitButton,
+        ],
       ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 1080 : 600),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 32 : 16,
-              vertical: isDesktop ? 24 : 16,
+    );
+
+    // RIGHT PANEL 1: Preview Card
+    final previewCard = NeonCard(
+      padding: const EdgeInsets.all(20),
+      borderRadius: 16,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.visibility_outlined,
+                    size: 19,
+                    color: AppColors.accentPrimary,
+                  ),
+                  const SizedBox(width: 9),
+                  Text(
+                    'Preview',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: AppColors.accentPrimary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.accentPrimary.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: CurrencyText(
+                  amount: totalConsequence,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.accentPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.bgSurfaceElevated,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderDefault),
             ),
-            child: isDesktop
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (selectedAccusedUser != null)
+                  Row(
                     children: [
+                      UserAvatar(user: selectedAccusedUser, size: 46),
+                      const SizedBox(width: 14),
                       Expanded(
-                        flex: 6,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            accusedSection,
-                            const SizedBox(height: 24),
-                            dateAdjusterSection,
-                            const SizedBox(height: 24),
-                            noteSection,
-                            const SizedBox(height: 16),
-                            swearTemplatesSection,
+                            Text(
+                              _cleanDisplayName(selectedAccusedUser),
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _previewQuoteText(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 28),
-                      Expanded(
-                        flex: 5,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            jarEmblem,
-                            const SizedBox(height: 20),
-                            swearCountSection,
-                            const SizedBox(height: 16),
-                            summaryCard,
-                            const SizedBox(height: 20),
-                            submitButton,
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      jarEmblem,
-                      const SizedBox(height: 24),
-                      accusedSection,
-                      const SizedBox(height: 24),
-                      dateAdjusterSection,
-                      const SizedBox(height: 24),
-                      swearCountSection,
-                      const SizedBox(height: 24),
-                      noteSection,
-                      const SizedBox(height: 16),
-                      swearTemplatesSection,
-                      const SizedBox(height: 20),
-                      summaryCard,
-                      const SizedBox(height: 24),
-                      submitButton,
                     ],
                   ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Divider(height: 1, color: AppColors.borderDefault),
+                ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                      color: AppColors.accentPrimary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            DateFormat.yMMMd().format(_selectedDate),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            'Date',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // RIGHT PANEL 2: Swear count for this report Card
+    final swearCountCard = NeonCard(
+      padding: const EdgeInsets.all(20),
+      borderRadius: 16,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.bar_chart_rounded,
+                  size: 22,
+                  color: AppColors.accentMint,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Swear count for this report',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 17,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'How many times was this word said?',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: _swearCount > _minSwearCount
+                    ? () => setState(() => _swearCount--)
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline, size: 36),
+                color: AppColors.accentMint,
+                disabledColor: AppColors.accentMint.withValues(alpha: 0.3),
+              ),
+              const SizedBox(width: 10),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showCustomCountDialog(context),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 112, minHeight: 62),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 22,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF152228),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.borderMint,
+                        width: 1.2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$_swearCount',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.edit_outlined,
+                          size: 16,
+                          color: AppColors.accentMint,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                onPressed: _swearCount < 99
+                    ? () => setState(() => _swearCount++)
+                    : null,
+                icon: const Icon(Icons.add_circle_outline, size: 36),
+                color: AppColors.accentMint,
+                disabledColor: AppColors.accentMint.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+          if (_templateSwearsTotal > 0) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                'Minimum $_templateSwearsTotal from selected swear templates'
+                '${_swearCount > _templateSwearsTotal ? " (+${_swearCount - _templateSwearsTotal} extra)" : ""}',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  color: AppColors.accentMint,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickButton('+1', () => _setCountOffset(1)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickButton('+2', () => _setCountOffset(2)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickButton('+5', () => _setCountOffset(5)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: _buildQuickButton(
+                  'Max (99)',
+                  () => setState(() => _swearCount = 99),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSurfaceSubtle,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderDefault),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.info_rounded,
+                    size: 16,
+                    color: AppColors.accentMint,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'You can also tap the number to type a custom amount if the word isn\'t on the list or was said more times.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Scaffold(
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 1140 : 600),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 32 : 16,
+                vertical: isDesktop ? 24 : 16,
+              ),
+              child: isDesktop
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 65,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              pageHeader,
+                              const SizedBox(height: 14),
+                              mainLeftStepsCard,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 22),
+                        Expanded(
+                          flex: 35,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 38),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                previewCard,
+                                const SizedBox(height: 18),
+                                swearCountCard,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        pageHeader,
+                        const SizedBox(height: 14),
+                        mainLeftStepsCard,
+                        const SizedBox(height: 16),
+                        swearCountCard,
+                        const SizedBox(height: 16),
+                        previewCard,
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSwearTemplateCounterChip(String swear) {
+  Widget _buildSwearGridTile(String swear) {
     final count = _selectedSwearCounts[swear] ?? 0;
     final isSelected = count > 0;
 
-    if (!isSelected) {
-      return InkWell(
-        onTap: () => _adjustTemplateSwearCount(swear, 1),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          // If already selected once and user taps, toggle off if count == 1 or allow incrementing via Selected row;
+          // Wait: let's make tapping an unselected swear select it (+1), and tapping a selected swear toggle it off if count == 1, or increment if tapped on the + badge.
+          // Even better: tapping the tile increments (+1) or toggles? Let's check: in widget_test.dart:
+          // await tester.tap(find.text('Carajo')); -> +1
+          // await tester.tap(find.text('Mierda')); -> +1
+          // await tester.tap(find.text('Mierda ×1').first); -> +1 (becomes 2)
+          // And what if a user wants to deselect a single word by tapping it or its remove button?
+          // If count == 0 -> _adjustTemplateSwearCount(swear, 1).
+          // If count > 0 -> _adjustTemplateSwearCount(swear, -1) when tapping the tile, while tapping 'Mierda ×1' in the Selected bar increments it!
+          if (!isSelected) {
+            _adjustTemplateSwearCount(swear, 1);
+          } else {
+            _adjustTemplateSwearCount(swear, -1);
+          }
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.accentPrimary
+                : AppColors.bgSurfaceElevated,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.accentPrimary
+                  : AppColors.borderDefault,
+              width: isSelected ? 1.5 : 1.0,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            count > 1 ? '$swear (×$count)' : swear,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected
+                  ? AppColors.onAccentPrimary
+                  : AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOtherTile() {
+    final isActive = _showCustomNoteField || _noteController.text.isNotEmpty;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _showCustomNoteField = !_showCustomNoteField;
+          });
+          if (_showCustomNoteField) {
+            Future.delayed(const Duration(milliseconds: 50), () {
+              if (mounted) _noteFocusNode.requestFocus();
+            });
+          }
+        },
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: AppColors.bgSurfaceElevated,
+            color: isActive
+                ? AppColors.accentPrimary.withValues(alpha: 0.16)
+                : AppColors.bgSurfaceElevated,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.borderDefault),
+            border: Border.all(
+              color:
+                  isActive ? AppColors.accentPrimary : AppColors.borderDefault,
+            ),
           ),
+          alignment: Alignment.center,
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.add_rounded,
-                size: 14,
-                color: AppColors.textSecondary,
+                size: 16,
+                color: isActive
+                    ? AppColors.accentPrimary
+                    : AppColors.textSecondary,
               ),
               const SizedBox(width: 4),
-              Text(
-                swear,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
+              Flexible(
+                child: Text(
+                  'Other',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive
+                        ? AppColors.accentPrimary
+                        : AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],
           ),
         ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.accentPrimary.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.accentPrimary, width: 1.2),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: () => _adjustTemplateSwearCount(swear, -1),
-            borderRadius: BorderRadius.circular(6),
-            child: const Padding(
-              padding: EdgeInsets.all(4.0),
-              child: Icon(
-                Icons.remove_rounded,
-                size: 15,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          InkWell(
-            onTap: _swearCount < 99
-                ? () => _adjustTemplateSwearCount(swear, 1)
-                : null,
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-              child: Text(
-                '$swear ×$count',
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ),
-          InkWell(
-            onTap: _swearCount < 99
-                ? () => _adjustTemplateSwearCount(swear, 1)
-                : null,
-            borderRadius: BorderRadius.circular(6),
-            child: const Padding(
-              padding: EdgeInsets.all(4.0),
-              child: Icon(
-                Icons.add_rounded,
-                size: 15,
-                color: AppColors.accentPrimary,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -926,7 +1318,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.accentPrimary.withValues(alpha: 0.16)
+              ? AppColors.accentPrimary.withValues(alpha: 0.18)
               : AppColors.bgSurfaceElevated,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
@@ -950,7 +1342,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+                color:
+                    selected ? AppColors.textPrimary : AppColors.textSecondary,
               ),
             ),
           ],
@@ -971,7 +1364,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
               primary: AppColors.accentPrimary,
-              onPrimary: Colors.white,
+              onPrimary: AppColors.onAccentPrimary,
               surface: AppColors.bgSurface,
               onSurface: AppColors.textPrimary,
             ),
@@ -1009,8 +1402,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
         ),
         title: Text(
           'Enter Swear Count',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w600,
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
           ),
         ),
@@ -1038,7 +1431,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(2),
                 ],
-                style: GoogleFonts.outfit(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -1051,11 +1444,13 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.borderDefault),
+                    borderSide:
+                        const BorderSide(color: AppColors.borderDefault),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.accentPrimary),
+                    borderSide:
+                        const BorderSide(color: AppColors.accentPrimary),
                   ),
                 ),
                 onSubmitted: (val) {
@@ -1094,81 +1489,73 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     );
   }
 
-  Widget _buildUserSelectorTile(
-    AppUser user,
-    AppUser? currentUser, {
-    required bool isDesktop,
-  }) {
+  Widget _buildUserSelectorTile(AppUser user, AppUser? currentUser) {
     final isSelected = _selectedAccusedId == user.id;
+    final cleanFirst = _cleanDisplayName(user).split(' ').first;
 
-    return InkWell(
-      onTap: () => setState(() => _selectedAccusedId = user.id),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: isDesktop ? 124 : null,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.accentPrimary.withValues(alpha: 0.14)
-              : AppColors.bgSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.accentPrimary : AppColors.borderDefault,
-            width: isSelected ? 1.5 : 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedAccusedId = user.id),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF17202A)
+                : AppColors.bgSurfaceSubtle,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color:
+                  isSelected ? AppColors.accentPrimary : AppColors.borderDefault,
+              width: isSelected ? 1.5 : 1.0,
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            UserAvatar(user: user, size: 44),
-            const SizedBox(height: 8),
-            Text(
-              user.id == currentUser?.id
-                  ? 'Myself'
-                  : user.displayName.split(' ').first,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: isSelected
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              UserAvatar(user: user, size: 44, showBadge: false),
+              const SizedBox(height: 10),
+              Text(
+                cleanFirst,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                  color: isSelected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              user.isKeeper ? 'Keeper' : 'Member',
-              style: GoogleFonts.inter(
-                fontSize: 10.5,
-                color:
-                    user.isKeeper ? AppColors.accentPrimary : AppColors.textMuted,
-                fontWeight: user.isKeeper ? FontWeight.w600 : FontWeight.w500,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildQuickButton(String label, VoidCallback onPressed) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.bgSurfaceElevated,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.borderDefault),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurfaceElevated,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.borderDefault),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
       ),
@@ -1213,9 +1600,9 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
         _selectedSwearCounts.clear();
         _swearCount = 1;
         _selectedDate = DateTime.now();
+        _showCustomNoteField = false;
       });
       widget.onReportSubmitted?.call();
     }
   }
 }
-

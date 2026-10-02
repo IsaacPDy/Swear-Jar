@@ -46,17 +46,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final pageHeader = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PROFILE',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.5,
+            color: AppColors.accentGoldMuted,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Your Profile',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: isDesktop ? 30 : 24,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Manage your display name, GCash number, and view group members.',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+
     final identityCard = NeonCard(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          UserAvatar(user: currentUser, size: 64),
-          const SizedBox(height: 12),
+          UserAvatar(user: currentUser, size: 68, showBadge: true),
+          const SizedBox(height: 14),
           Text(
             currentUser.displayName,
-            style: GoogleFonts.outfit(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 20,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: AppColors.textPrimary,
             ),
           ),
@@ -81,14 +114,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     color: role == UserRole.keeper
                         ? AppColors.accentPrimary.withValues(alpha: 0.14)
                         : (role == UserRole.admin
-                            ? AppColors.accentInfo.withValues(alpha: 0.14)
+                            ? AppColors.accentMint.withValues(alpha: 0.14)
                             : AppColors.bgSurfaceElevated),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: role == UserRole.keeper
                           ? AppColors.accentPrimary.withValues(alpha: 0.4)
                           : (role == UserRole.admin
-                              ? AppColors.accentInfo.withValues(alpha: 0.4)
+                              ? AppColors.accentMint.withValues(alpha: 0.4)
                               : AppColors.borderDefault),
                     ),
                   ),
@@ -96,12 +129,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     role.name.toUpperCase(),
                     style: GoogleFonts.inter(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
                       color: role == UserRole.keeper
                           ? AppColors.accentPrimary
                           : (role == UserRole.admin
-                              ? AppColors.accentInfo
+                              ? AppColors.accentMint
                               : AppColors.textSecondary),
                     ),
                   ),
@@ -113,7 +146,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     final paymentDetailsCard = NeonCard(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -124,9 +157,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 'PAYMENT DETAILS',
                 style: GoogleFonts.inter(
                   fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
-                  color: AppColors.textMuted,
+                  color: AppColors.textSecondary,
                 ),
               ),
               TextButton(
@@ -147,7 +180,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _isEditing ? 'Save Changes' : 'Edit',
                   style: GoogleFonts.inter(
                     color: AppColors.accentPrimary,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
@@ -196,15 +229,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.accentInfo.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    color: AppColors.accentMint.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.phone_android_outlined,
                     size: 18,
-                    color: AppColors.accentInfo,
+                    color: AppColors.accentMint,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -215,16 +248,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Text(
                         'GCash Number',
                         style: GoogleFonts.inter(
-                            fontSize: 12, color: AppColors.textMuted),
+                            fontSize: 12, color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         currentUser.gcashNumber?.isNotEmpty == true
                             ? currentUser.gcashNumber!
                             : 'Not set (tap Edit to add)',
-                        style: GoogleFonts.outfit(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                         ),
                       ),
@@ -240,9 +273,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final adminCard = currentUser.isAdmin
         ? NeonCard(
-            backgroundColor: AppColors.accentInfo.withValues(alpha: 0.08),
-            borderColor: AppColors.accentInfo.withValues(alpha: 0.35),
-            padding: const EdgeInsets.all(16),
+            backgroundColor: AppColors.accentPrimary.withValues(alpha: 0.08),
+            borderColor: AppColors.accentPrimary.withValues(alpha: 0.35),
+            padding: const EdgeInsets.all(18),
             onTap: () {
               Navigator.push(
                 context,
@@ -254,12 +287,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.accentInfo.withValues(alpha: 0.16),
+                    color: AppColors.accentPrimary.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.admin_panel_settings_outlined,
-                    color: AppColors.accentInfo,
+                    color: AppColors.accentPrimary,
                     size: 22,
                   ),
                 ),
@@ -270,8 +303,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       Text(
                         'Admin Dashboard',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w600,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                           fontSize: 15.5,
                         ),
@@ -280,7 +313,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Text(
                         'Add/delete members, assign Google logins, appoint Keeper, update rate.',
                         style: GoogleFonts.inter(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           color: AppColors.textSecondary,
                         ),
                       ),
@@ -309,35 +342,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           'GROUP MEMBERS',
           style: GoogleFonts.inter(
             fontSize: 11.5,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.8,
-            color: AppColors.textMuted,
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 10),
         NeonCard(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           child: Column(
             children: [
               for (int i = 0; i < users.length; i++) ...[
                 ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                  leading: UserAvatar(user: users[i], size: 38),
+                  leading: UserAvatar(user: users[i], size: 40),
                   title: Row(
                     children: [
                       Flexible(
                         child: Text(
                           users[i].displayName,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.plusJakartaSans(
                             color: users[i].id == currentUser.id
                                 ? AppColors.accentPrimary
                                 : AppColors.textPrimary,
-                            fontWeight: users[i].id == currentUser.id
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5,
                           ),
                         ),
                       ),
@@ -369,7 +400,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       fontSize: 11,
                       color: users[i].isKeeper
                           ? AppColors.accentPrimary
-                          : AppColors.textMuted,
+                          : AppColors.textSecondary,
                       fontWeight:
                           users[i].isKeeper ? FontWeight.w600 : FontWeight.w500,
                     ),
@@ -412,11 +443,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: AppColors.accentInfo
+                                color: AppColors.accentMint
                                     .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: AppColors.accentInfo
+                                  color: AppColors.accentMint
                                       .withValues(alpha: 0.35),
                                 ),
                               ),
@@ -425,7 +456,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.accentInfo,
+                                  color: AppColors.accentMint,
                                 ),
                               ),
                             )
@@ -441,65 +472,63 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Your Profile',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 18),
-        ),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 1120 : 600),
-          child: ListView(
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 32 : 16,
-              vertical: isDesktop ? 24 : 12,
-            ),
-            children: [
-              if (isDesktop)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          identityCard,
-                          const SizedBox(height: 16),
-                          paymentDetailsCard,
-                          if (adminCard != null) ...[
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 1140 : 600),
+            child: ListView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 32 : 16,
+                vertical: isDesktop ? 28 : 16,
+              ),
+              children: [
+                pageHeader,
+                const SizedBox(height: 22),
+                if (isDesktop)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            identityCard,
                             const SizedBox(height: 16),
-                            adminCard,
+                            paymentDetailsCard,
+                            if (adminCard != null) ...[
+                              const SizedBox(height: 16),
+                              adminCard,
+                            ],
+                            const SizedBox(height: 20),
+                            signOutButton,
                           ],
-                          const SizedBox(height: 20),
-                          signOutButton,
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      flex: 6,
-                      child: groupMembersSection,
-                    ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        flex: 6,
+                        child: groupMembersSection,
+                      ),
+                    ],
+                  )
+                else ...[
+                  identityCard,
+                  const SizedBox(height: 20),
+                  paymentDetailsCard,
+                  if (adminCard != null) ...[
+                    const SizedBox(height: 16),
+                    adminCard,
                   ],
-                )
-              else ...[
-                identityCard,
-                const SizedBox(height: 20),
-                paymentDetailsCard,
-                if (adminCard != null) ...[
-                  const SizedBox(height: 16),
-                  adminCard,
+                  const SizedBox(height: 24),
+                  groupMembersSection,
+                  const SizedBox(height: 24),
+                  signOutButton,
+                  const SizedBox(height: 24),
                 ],
-                const SizedBox(height: 24),
-                groupMembersSection,
-                const SizedBox(height: 24),
-                signOutButton,
-                const SizedBox(height: 24),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -526,4 +555,3 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 }
-

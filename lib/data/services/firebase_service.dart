@@ -146,6 +146,28 @@ class FirebaseDataService
           currentRatePerSwear: 50.0,
           groupName: 'Our Friend Group',
           totalSwearsAllTime: 0,
+          swearLanguages: const [
+            SwearLanguage(
+              id: 'english',
+              name: 'English',
+              swears: [
+                'Damn',
+                'Fuck',
+                'Shit',
+                'Wtf',
+                'Bitch',
+                'Asshole',
+                'Crap',
+                'Dumbass',
+                'Hell',
+              ],
+            ),
+            SwearLanguage(
+              id: 'tagalog',
+              name: 'Tagalog',
+              swears: ['Putangina', 'Gago', 'Tangina', 'Tarantado', 'Ulol'],
+            ),
+          ],
           updatedAt: now,
         );
         batch.set(configRef, initialConfig.toMap(), SetOptions(merge: true));

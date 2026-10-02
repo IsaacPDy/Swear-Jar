@@ -51,45 +51,75 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Report History & Review',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 18),
-        ),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 1120 : 600),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 32 : 16,
-                  vertical: isDesktop ? 14 : 10,
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 1140 : 600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isDesktop ? 32 : 16,
+                    isDesktop ? 28 : 16,
+                    isDesktop ? 32 : 16,
+                    14,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildFilterChip('All (${reports.length})', 'all'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(
-                        'Pending (${reports.where((r) => r.isPending).length})',
-                        'pending',
-                        highlight: reports.any((r) => r.isPending),
+                      Text(
+                        'REPORTS',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                          color: AppColors.accentGoldMuted,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('Confirmed', 'confirmed'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('Rejected', 'rejected'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Report History & Review',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: isDesktop ? 30 : 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Audit submitted swear incidents, review pending reports, and manage ledger records.',
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('All (${reports.length})', 'all'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(
+                              'Pending (${reports.where((r) => r.isPending).length})',
+                              'pending',
+                              highlight: reports.any((r) => r.isPending),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Confirmed', 'confirmed'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Rejected', 'rejected'),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-              const Divider(color: AppColors.borderDefault, height: 1),
-              Expanded(
+                const Divider(color: AppColors.borderDefault, height: 1),
+                Expanded(
                 child: filteredReports.isEmpty
                     ? Center(
                         child: Column(
@@ -193,6 +223,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -482,13 +513,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       selectedColor: AppColors.accentPrimary,
       backgroundColor: highlight
           ? AppColors.accentWarning.withValues(alpha: 0.14)
-          : AppColors.bgSurface,
+          : AppColors.bgSurfaceElevated,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       labelStyle: GoogleFonts.inter(
         color: isSelected
-            ? Colors.white
-            : (highlight ? AppColors.accentWarning : AppColors.textSecondary),
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            ? AppColors.onAccentPrimary
+            : (highlight ? AppColors.accentWarning : AppColors.textPrimary),
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
         fontSize: 12.5,
       ),
       side: BorderSide(

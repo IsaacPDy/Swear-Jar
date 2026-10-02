@@ -48,8 +48,11 @@ void main() {
 
     await tester.tap(find.text('Report'));
     await tester.pumpAndSettle();
-    expect(find.text('WHO COMMITTED THE SWEAR?'), findsOneWidget);
-    expect(find.text('SWEAR COUNT (1–99)'), findsOneWidget);
+    expect(find.text('Who swore?'), findsOneWidget);
+    expect(find.text('Which word did they say?'), findsOneWidget);
+    expect(find.text('When did it happen?'), findsOneWidget);
+    expect(find.text('Swear count for this report'), findsOneWidget);
+    expect(find.text('Add to Ledger'), findsOneWidget);
 
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
@@ -119,7 +122,8 @@ void main() {
 
     await tester.tap(find.text('Report'));
     await tester.pumpAndSettle();
-    expect(find.text('WHO COMMITTED THE SWEAR?'), findsOneWidget);
+    expect(find.text('Who swore?'), findsOneWidget);
+    expect(find.text('Which word did they say?'), findsOneWidget);
 
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
@@ -293,8 +297,8 @@ void main() {
     await tester.tap(find.text('Report'));
     await tester.pumpAndSettle();
 
-    expect(find.text('NOTE / CONTEXT (OPTIONAL)'), findsOneWidget);
-    expect(find.text('SWEAR TEMPLATES (OPTIONAL)'), findsOneWidget);
+    expect(find.text('Who swore?'), findsOneWidget);
+    expect(find.text('Which word did they say?'), findsOneWidget);
 
     // Select the newly created 'Spanish' language chip
     await tester.tap(find.text('Spanish'));

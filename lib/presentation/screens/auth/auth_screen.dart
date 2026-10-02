@@ -186,10 +186,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           isDesktop ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: AppColors.bgSurface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: AppColors.accentPrimary.withValues(alpha: 0.4),
               width: 1.5,
@@ -201,19 +201,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.account_balance_wallet_outlined,
-            size: 40,
-            color: AppColors.accentPrimary,
-          ),
+          child: const SwearJarBrandIcon(size: 46),
         ),
         const SizedBox(height: 20),
         Text(
           'SWEAR JAR 2.0',
-          style: GoogleFonts.outfit(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: isDesktop ? 30 : 26,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.6,
             color: AppColors.textPrimary,
           ),
         ),

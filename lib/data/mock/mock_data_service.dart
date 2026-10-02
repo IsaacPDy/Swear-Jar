@@ -97,7 +97,17 @@ class MockDataService
         SwearLanguage(
           id: 'english',
           name: 'English',
-          swears: ['F*ck', 'Sh*t', 'B*tch', 'Damn', 'Assh*le'],
+          swears: [
+            'Damn',
+            'Fuck',
+            'Shit',
+            'Wtf',
+            'Bitch',
+            'Asshole',
+            'Crap',
+            'Dumbass',
+            'Hell',
+          ],
         ),
         SwearLanguage(
           id: 'tagalog',

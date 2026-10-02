@@ -27,7 +27,7 @@ class JarScreen extends ConsumerWidget {
         orElse: () => AppUser(
           id: uid,
           email: '',
-          displayName: 'Member ($uid)',
+          displayName: 'Former Member',
           roles: const [UserRole.member],
           status: UserStatus.approved,
           createdAt: DateTime.now(),

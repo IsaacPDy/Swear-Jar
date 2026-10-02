@@ -23,10 +23,54 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
   int _swearCount = 1;
   DateTime _selectedDate = DateTime.now();
   final TextEditingController _noteController = TextEditingController();
+  final Map<String, int> _selectedSwearCounts = {};
+  String _selectedLanguageId = 'all';
   bool _isSubmitting = false;
 
   late AnimationController _shakeController;
   late Animation<double> _shakeAnimation;
+
+  int get _templateSwearsTotal =>
+      _selectedSwearCounts.values.fold(0, (sum, count) => sum + count);
+
+  int get _minSwearCount =>
+      _templateSwearsTotal > 0 ? _templateSwearsTotal : 1;
+
+  void _adjustTemplateSwearCount(String swear, int delta) {
+    setState(() {
+      final oldTemplateTotal = _templateSwearsTotal;
+      final overage = oldTemplateTotal == 0
+          ? (_swearCount - 1).clamp(0, 99)
+          : (_swearCount - oldTemplateTotal).clamp(0, 99);
+
+      final currentForSwear = _selectedSwearCounts[swear] ?? 0;
+      final nextForSwear = (currentForSwear + delta).clamp(0, 99);
+
+      if (nextForSwear <= 0) {
+        _selectedSwearCounts.remove(swear);
+      } else {
+        _selectedSwearCounts[swear] = nextForSwear;
+      }
+
+      final newTemplateTotal = _templateSwearsTotal;
+      if (newTemplateTotal > 0) {
+        _swearCount = (newTemplateTotal + overage).clamp(newTemplateTotal, 99);
+      } else {
+        _swearCount = (1 + overage).clamp(1, 99);
+      }
+    });
+  }
+
+  void _clearTemplateSwears() {
+    setState(() {
+      final oldTemplateTotal = _templateSwearsTotal;
+      final overage = oldTemplateTotal == 0
+          ? (_swearCount - 1).clamp(0, 99)
+          : (_swearCount - oldTemplateTotal).clamp(0, 99);
+      _selectedSwearCounts.clear();
+      _swearCount = (1 + overage).clamp(1, 99);
+    });
+  }
 
   @override
   void initState() {
@@ -63,6 +107,12 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     final config = ref.watch(systemConfigProvider).valueOrNull;
     final keeper = ref.watch(activeKeeperProvider);
     final isDesktop = AppBreakpoints.isDesktop(context);
+
+    final swearLanguages = config?.swearLanguages ?? const <SwearLanguage>[];
+    if (_selectedLanguageId != 'all' &&
+        !swearLanguages.any((l) => l.id == _selectedLanguageId)) {
+      _selectedLanguageId = 'all';
+    }
 
     final currentRate = config?.currentRatePerSwear ?? 50.0;
     final totalConsequence = _swearCount * currentRate;
@@ -315,7 +365,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    onPressed: _swearCount > 1
+                    onPressed: _swearCount > _minSwearCount
                         ? () => setState(() => _swearCount--)
                         : null,
                     icon: const Icon(Icons.remove_circle_outline, size: 30),
@@ -340,27 +390,16 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                           ),
                         ),
                         alignment: Alignment.center,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '$_swearCount',
-                              style: GoogleFonts.outfit(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.edit_outlined,
-                              size: 15,
-                              color: AppColors.accentPrimary,
-                            ),
-                          ],
+                        child: Text(
+                          '$_swearCount',
+                          style: GoogleFonts.outfit(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures()
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -375,6 +414,18 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   ),
                 ],
               ),
+              if (_templateSwearsTotal > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Minimum $_templateSwearsTotal from selected swear templates'
+                  '${_swearCount > _templateSwearsTotal ? " (+${_swearCount - _templateSwearsTotal} extra)" : ""}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: AppColors.accentPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               Wrap(
                 alignment: WrapAlignment.center,
@@ -432,6 +483,187 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
           ),
           style:
               GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 13.5),
+        ),
+      ],
+    );
+
+    final visibleLanguages = _selectedLanguageId == 'all'
+        ? swearLanguages
+        : swearLanguages.where((l) => l.id == _selectedLanguageId).toList();
+
+    final swearTemplatesSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.translate_rounded,
+                  size: 16,
+                  color: AppColors.accentPrimary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'SWEAR TEMPLATES (OPTIONAL)',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+            if (_templateSwearsTotal > 0)
+              InkWell(
+                onTap: _clearTemplateSwears,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Text(
+                    'Clear ($_templateSwearsTotal)',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accentError,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        NeonCard(
+          padding: const EdgeInsets.all(14),
+          child: swearLanguages.isEmpty
+              ? Text(
+                  'No swear templates configured yet. An Admin can add languages and swears in the Admin Console.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          if (swearLanguages.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: _buildDateChip(
+                                label: 'All',
+                                selected: _selectedLanguageId == 'all',
+                                icon: Icons.apps_rounded,
+                                onTap: () => setState(
+                                    () => _selectedLanguageId = 'all'),
+                              ),
+                            ),
+                          for (final lang in swearLanguages)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: _buildDateChip(
+                                label: lang.name,
+                                selected: _selectedLanguageId == lang.id,
+                                icon: Icons.language_rounded,
+                                onTap: () => setState(
+                                    () => _selectedLanguageId = lang.id),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (visibleLanguages.every((l) => l.swears.isEmpty))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Text(
+                          _selectedLanguageId == 'all'
+                              ? 'No swears added to your languages yet. Add swears inside your language in the Admin Console.'
+                              : 'No swears added to ${visibleLanguages.firstOrNull?.name ?? "this language"} yet.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: AppColors.textMuted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      )
+                    else
+                      for (int i = 0; i < visibleLanguages.length; i++) ...[
+                        if (visibleLanguages[i].swears.isNotEmpty) ...[
+                          if (_selectedLanguageId == 'all' &&
+                              swearLanguages.length > 1) ...[
+                            if (i > 0) const SizedBox(height: 10),
+                            Text(
+                              visibleLanguages[i].name.toUpperCase(),
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.6,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final swear in visibleLanguages[i].swears)
+                                _buildSwearTemplateCounterChip(swear),
+                            ],
+                          ),
+                        ],
+                      ],
+                    if (_selectedSwearCounts.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Divider(color: AppColors.borderDefault, height: 1),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Selected:',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          for (final entry in _selectedSwearCounts.entries)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentPrimary
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppColors.accentPrimary
+                                      .withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                '${entry.key} ×${entry.value}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
         ),
       ],
     );
@@ -536,6 +768,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                             dateAdjusterSection,
                             const SizedBox(height: 24),
                             noteSection,
+                            const SizedBox(height: 16),
+                            swearTemplatesSection,
                           ],
                         ),
                       ),
@@ -569,6 +803,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                       swearCountSection,
                       const SizedBox(height: 24),
                       noteSection,
+                      const SizedBox(height: 16),
+                      swearTemplatesSection,
                       const SizedBox(height: 20),
                       summaryCard,
                       const SizedBox(height: 24),
@@ -577,6 +813,102 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                   ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSwearTemplateCounterChip(String swear) {
+    final count = _selectedSwearCounts[swear] ?? 0;
+    final isSelected = count > 0;
+
+    if (!isSelected) {
+      return InkWell(
+        onTap: () => _adjustTemplateSwearCount(swear, 1),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurfaceElevated,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.borderDefault),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.add_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                swear,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.accentPrimary.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.accentPrimary, width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => _adjustTemplateSwearCount(swear, -1),
+            borderRadius: BorderRadius.circular(6),
+            child: const Padding(
+              padding: EdgeInsets.all(4.0),
+              child: Icon(
+                Icons.remove_rounded,
+                size: 15,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: _swearCount < 99
+                ? () => _adjustTemplateSwearCount(swear, 1)
+                : null,
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+              child: Text(
+                '$swear ×$count',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: _swearCount < 99
+                ? () => _adjustTemplateSwearCount(swear, 1)
+                : null,
+            borderRadius: BorderRadius.circular(6),
+            child: const Padding(
+              padding: EdgeInsets.all(4.0),
+              child: Icon(
+                Icons.add_rounded,
+                size: 15,
+                color: AppColors.accentPrimary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -689,7 +1021,9 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Enter the number of swears (1–99):',
+                _templateSwearsTotal > 0
+                    ? 'Enter the number of swears ($_minSwearCount–99):'
+                    : 'Enter the number of swears (1–99):',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.textSecondary,
@@ -727,7 +1061,8 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                 onSubmitted: (val) {
                   final parsed = int.tryParse(val.trim());
                   if (parsed != null && parsed >= 1) {
-                    setState(() => _swearCount = parsed.clamp(1, 99));
+                    setState(
+                        () => _swearCount = parsed.clamp(_minSwearCount, 99));
                   }
                   Navigator.pop(ctx);
                 },
@@ -749,7 +1084,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
             onPressed: () {
               final parsed = int.tryParse(controller.text.trim());
               if (parsed != null && parsed >= 1) {
-                setState(() => _swearCount = parsed.clamp(1, 99));
+                setState(() => _swearCount = parsed.clamp(_minSwearCount, 99));
               }
               Navigator.pop(ctx);
             },
@@ -842,7 +1177,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
 
   void _setCountOffset(int offset) {
     setState(() {
-      _swearCount = (_swearCount + offset).clamp(1, 99);
+      _swearCount = (_swearCount + offset).clamp(_minSwearCount, 99);
     });
   }
 
@@ -859,6 +1194,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
           accusedId: _selectedAccusedId!,
           count: _swearCount,
           note: note.isEmpty ? null : note,
+          swearBreakdown: Map<String, int>.from(_selectedSwearCounts),
           rateApplied: currentRate,
           swearDate: _selectedDate,
         );
@@ -874,6 +1210,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       );
       _noteController.clear();
       setState(() {
+        _selectedSwearCounts.clear();
         _swearCount = 1;
         _selectedDate = DateTime.now();
       });

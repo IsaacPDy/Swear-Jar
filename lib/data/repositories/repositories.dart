@@ -17,6 +17,7 @@ abstract class IReportRepository {
     required String accusedId,
     required int count,
     String? note,
+    Map<String, int>? swearBreakdown,
     required double rateApplied,
     DateTime? swearDate,
   });
@@ -37,6 +38,7 @@ abstract class IReportRepository {
     required int count,
     required DateTime swearDate,
     String? note,
+    Map<String, int>? swearBreakdown,
     required List<DebtObligation> existingDebts,
   });
   Future<ReportDeletionResult> deleteReport({
@@ -71,10 +73,25 @@ abstract class IUserRepository {
   Future<void> rejectUser(String userId);
   Future<void> toggleAdminRole(String userId, bool makeAdmin);
   Future<void> appointKeeper(String newKeeperId, String oldKeeperId, List<DebtObligation> debts);
+  Future<AppUser> createManualUser({
+    required String displayName,
+    String? gcashNumber,
+  });
+  Future<void> assignPendingUserToExisting({
+    required String pendingUserId,
+    required String targetUserId,
+  });
+  Future<void> unlinkUserAccount(String userId);
+  Future<void> deleteUserCompletely({
+    required String userId,
+    required List<SwearReport> existingReports,
+    required List<DebtObligation> existingDebts,
+  });
 }
 
 abstract class IConfigRepository {
   Stream<SystemConfig> watchConfig();
   Future<void> updateRate(double newRate);
   Future<void> updateKeeper(String newKeeperId);
+  Future<void> updateSwearLanguages(List<SwearLanguage> languages);
 }

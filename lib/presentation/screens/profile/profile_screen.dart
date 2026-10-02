@@ -39,7 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
-    final users = ref.watch(usersListProvider).valueOrNull ?? [];
+    final users = ref.watch(approvedUsersProvider);
     final isDesktop = AppBreakpoints.isDesktop(context);
 
     if (currentUser == null) {
@@ -278,7 +278,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Manage user approvals, appoint Keeper, update penalty rate.',
+                        'Add/delete members, assign Google logins, appoint Keeper, update rate.',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: AppColors.textSecondary,

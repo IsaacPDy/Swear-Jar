@@ -20,12 +20,14 @@ class FirebaseDataService
 
   FirebaseAuth get _auth => FirebaseAuth.instance;
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
+  late final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
   );
 
   AppUser? _cachedCurrentUser;
   StreamSubscription? _userDocSubscription;
+  bool _hasResolvedUserForCurrentAuth = false;
+  bool _isBootstrapping = false;
   final StreamController<AppUser?> _userStreamController =
       StreamController<AppUser?>.broadcast();
 
@@ -40,23 +42,49 @@ class FirebaseDataService
     }
     _auth.authStateChanges().listen((User? fbUser) async {
       await _userDocSubscription?.cancel();
+      _hasResolvedUserForCurrentAuth = false;
+      _isBootstrapping = false;
+
       if (fbUser == null) {
         _cachedCurrentUser = null;
         _userStreamController.add(null);
         return;
       }
 
-      final docRef = _firestore.collection('users').doc(fbUser.uid);
-      _userDocSubscription = docRef.snapshots().listen((snapshot) async {
+      _userDocSubscription =
+          _firestore.collection('users').snapshots().listen((snapshot) async {
         try {
-          if (!snapshot.exists || snapshot.data() == null) {
-            // If the document doesn't exist yet, we bootstrap or create it
-            await _bootstrapUser(fbUser);
-          } else {
-            final data = snapshot.data() ?? {};
-            final user = AppUser.fromMap(data, id: snapshot.id);
+          final allUsers = snapshot.docs
+              .map((doc) => AppUser.fromMap(doc.data(), id: doc.id))
+              .toList();
+
+          final matchingUsers =
+              allUsers.where((u) => u.authUid == fbUser.uid).toList();
+
+          if (matchingUsers.isNotEmpty) {
+            // Prefer approved profile if multiple temporarily exist
+            matchingUsers.sort((a, b) {
+              if (a.isApproved && !b.isApproved) return -1;
+              if (!a.isApproved && b.isApproved) return 1;
+              return 0;
+            });
+            final user = matchingUsers.first;
+            _hasResolvedUserForCurrentAuth = true;
             _cachedCurrentUser = user;
             _userStreamController.add(user);
+          } else {
+            if (_hasResolvedUserForCurrentAuth) {
+              // The user's account was unlinked or profile was deleted while signed in
+              _hasResolvedUserForCurrentAuth = false;
+              await signOut();
+            } else if (!_isBootstrapping) {
+              _isBootstrapping = true;
+              try {
+                await _bootstrapUser(fbUser, existingUsers: allUsers);
+              } finally {
+                _isBootstrapping = false;
+              }
+            }
           }
         } catch (e, stack) {
           debugPrint('Error handling user snapshot: $e\n$stack');
@@ -67,10 +95,12 @@ class FirebaseDataService
     });
   }
 
-  Future<void> _bootstrapUser(User fbUser) async {
+  Future<void> _bootstrapUser(
+    User fbUser, {
+    required List<AppUser> existingUsers,
+  }) async {
     try {
-      final usersSnapshot = await _firestore.collection('users').limit(2).get();
-      final isFirstUser = usersSnapshot.docs.isEmpty;
+      final isFirstUser = existingUsers.isEmpty;
 
       final now = DateTime.now();
       final roles = isFirstUser
@@ -87,8 +117,14 @@ class FirebaseDataService
         displayName = 'Member';
       }
 
+      // If a document with ID == fbUser.uid already exists (e.g., an unlinked profile),
+      // allocate a fresh document ID so we don't overwrite the existing member profile.
+      final idCollision = existingUsers.any((u) => u.id == fbUser.uid);
+      final docId = idCollision ? _uuid.v4() : fbUser.uid;
+
       final newUser = AppUser(
-        id: fbUser.uid,
+        id: docId,
+        authUid: fbUser.uid,
         email: fbUser.email ?? '',
         displayName: displayName,
         photoUrl: fbUser.photoURL,
@@ -100,13 +136,13 @@ class FirebaseDataService
       );
 
       final batch = _firestore.batch();
-      final userRef = _firestore.collection('users').doc(fbUser.uid);
+      final userRef = _firestore.collection('users').doc(docId);
       batch.set(userRef, newUser.toMap(), SetOptions(merge: true));
 
       if (isFirstUser) {
         final configRef = _firestore.collection('config').doc('system');
         final initialConfig = SystemConfig(
-          activeKeeperId: fbUser.uid,
+          activeKeeperId: docId,
           currentRatePerSwear: 50.0,
           groupName: 'Our Friend Group',
           totalSwearsAllTime: 0,
@@ -115,6 +151,7 @@ class FirebaseDataService
         batch.set(configRef, initialConfig.toMap(), SetOptions(merge: true));
       }
 
+      _hasResolvedUserForCurrentAuth = true;
       await batch.commit();
     } catch (e, stack) {
       debugPrint('Error bootstrapping user: $e\n$stack');
@@ -328,6 +365,132 @@ class FirebaseDataService
     await batch.commit();
   }
 
+  @override
+  Future<AppUser> createManualUser({
+    required String displayName,
+    String? gcashNumber,
+  }) async {
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    final trimmedName = displayName.trim();
+    final trimmedGcash = gcashNumber?.trim();
+
+    final newUser = AppUser(
+      id: id,
+      authUid: null,
+      email: '',
+      displayName: trimmedName.isEmpty ? 'Member' : trimmedName,
+      photoUrl: null,
+      gcashNumber:
+          (trimmedGcash == null || trimmedGcash.isEmpty) ? null : trimmedGcash,
+      roles: const [UserRole.member],
+      status: UserStatus.approved,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await _firestore.collection('users').doc(id).set(newUser.toMap());
+    return newUser;
+  }
+
+  @override
+  Future<void> assignPendingUserToExisting({
+    required String pendingUserId,
+    required String targetUserId,
+  }) async {
+    if (pendingUserId == targetUserId) return;
+
+    final pendingDoc =
+        await _firestore.collection('users').doc(pendingUserId).get();
+    final targetDoc =
+        await _firestore.collection('users').doc(targetUserId).get();
+    if (!pendingDoc.exists || !targetDoc.exists) return;
+
+    final pendingUser =
+        AppUser.fromMap(pendingDoc.data() ?? {}, id: pendingDoc.id);
+    final targetUser =
+        AppUser.fromMap(targetDoc.data() ?? {}, id: targetDoc.id);
+
+    final linkedAuthUid =
+        (pendingUser.authUid != null && pendingUser.authUid!.isNotEmpty)
+            ? pendingUser.authUid!
+            : pendingUser.id;
+
+    final updatedTarget = targetUser.copyWith(
+      authUid: linkedAuthUid,
+      email: pendingUser.email,
+      photoUrl: pendingUser.photoUrl ?? targetUser.photoUrl,
+      gcashNumber:
+          (targetUser.gcashNumber == null || targetUser.gcashNumber!.isEmpty)
+              ? pendingUser.gcashNumber
+              : targetUser.gcashNumber,
+      status: UserStatus.approved,
+      updatedAt: DateTime.now(),
+    );
+
+    final batch = _firestore.batch();
+    batch.set(
+      _firestore.collection('users').doc(targetUserId),
+      updatedTarget.toMap(),
+    );
+    batch.delete(_firestore.collection('users').doc(pendingUserId));
+    await batch.commit();
+  }
+
+  @override
+  Future<void> unlinkUserAccount(String userId) async {
+    final doc = await _firestore.collection('users').doc(userId).get();
+    if (!doc.exists) return;
+
+    final user = AppUser.fromMap(doc.data() ?? {}, id: doc.id);
+    final unlinked = user.copyWith(
+      clearAuthUid: true,
+      email: '',
+      clearPhotoUrl: true,
+      updatedAt: DateTime.now(),
+    );
+
+    await _firestore.collection('users').doc(userId).set(unlinked.toMap());
+  }
+
+  @override
+  Future<void> deleteUserCompletely({
+    required String userId,
+    required List<SwearReport> existingReports,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.deleteUserHistory(
+      userId: userId,
+      existingReports: existingReports,
+      existingDebts: existingDebts,
+    );
+
+    final batch = _firestore.batch();
+
+    batch.delete(_firestore.collection('users').doc(userId));
+
+    for (final reportId in result.deletedReportIds) {
+      batch.delete(_firestore.collection('reports').doc(reportId));
+    }
+
+    for (final debtId in result.deletedDebtIds) {
+      batch.delete(_firestore.collection('debts').doc(debtId));
+    }
+
+    if (result.swearCountDelta != 0) {
+      batch.set(
+        _firestore.collection('config').doc('system'),
+        {
+          'totalSwearsAllTime': FieldValue.increment(result.swearCountDelta),
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
   // -------------------------------------------------------------
   // REPORT REPOSITORY
   // -------------------------------------------------------------
@@ -359,6 +522,7 @@ class FirebaseDataService
     required String accusedId,
     required int count,
     String? note,
+    Map<String, int>? swearBreakdown,
     required double rateApplied,
     DateTime? swearDate,
   }) async {
@@ -370,6 +534,7 @@ class FirebaseDataService
       accusedId: accusedId,
       count: count,
       note: note,
+      swearBreakdown: swearBreakdown ?? const {},
       rateApplied: rateApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
@@ -466,6 +631,7 @@ class FirebaseDataService
     required int count,
     required DateTime swearDate,
     String? note,
+    Map<String, int>? swearBreakdown,
     required List<DebtObligation> existingDebts,
   }) async {
     final result = LedgerEngine.updateReport(
@@ -474,6 +640,7 @@ class FirebaseDataService
       count: count,
       swearDate: swearDate,
       note: note,
+      swearBreakdown: swearBreakdown,
       existingDebts: existingDebts,
     );
 
@@ -664,6 +831,14 @@ class FirebaseDataService
   Future<void> updateKeeper(String newKeeperId) async {
     await _firestore.collection('config').doc('system').set({
       'activeKeeperId': newKeeperId,
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> updateSwearLanguages(List<SwearLanguage> languages) async {
+    await _firestore.collection('config').doc('system').set({
+      'swearLanguages': languages.map((l) => l.toMap()).toList(),
       'updatedAt': DateTime.now().toIso8601String(),
     }, SetOptions(merge: true));
   }

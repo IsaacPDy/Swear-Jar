@@ -41,6 +41,20 @@ class ReportDeletionResult {
   });
 }
 
+class UserDeletionResult {
+  final String deletedUserId;
+  final List<String> deletedReportIds;
+  final List<String> deletedDebtIds;
+  final int swearCountDelta;
+
+  const UserDeletionResult({
+    required this.deletedUserId,
+    this.deletedReportIds = const [],
+    this.deletedDebtIds = const [],
+    required this.swearCountDelta,
+  });
+}
+
 class LedgerEngine {
   static const _uuid = Uuid();
 
@@ -271,6 +285,7 @@ class LedgerEngine {
     required int count,
     required DateTime swearDate,
     String? note,
+    Map<String, int>? swearBreakdown,
     required List<DebtObligation> existingDebts,
     DateTime? now,
   }) {
@@ -284,6 +299,7 @@ class LedgerEngine {
       swearDate: swearDate,
       note: (trimmedNote == null || trimmedNote.isEmpty) ? null : trimmedNote,
       clearNote: trimmedNote == null || trimmedNote.isEmpty,
+      swearBreakdown: swearBreakdown,
       totalAmount: newTotalAmount,
     );
 
@@ -353,6 +369,38 @@ class LedgerEngine {
       deletedReportId: report.id,
       deletedDebtIds: linkedDebtIds,
       swearCountDelta: swearCountDelta,
+    );
+  }
+
+  /// Identify all swear reports and debts belonging to a deleted user (where they are the accused/debtor)
+  /// while preserving reports they filed against other members.
+  static UserDeletionResult deleteUserHistory({
+    required String userId,
+    required List<SwearReport> existingReports,
+    required List<DebtObligation> existingDebts,
+  }) {
+    final userAccusedReports =
+        existingReports.where((r) => r.accusedId == userId).toList();
+    final deletedReportIds = userAccusedReports.map((r) => r.id).toSet();
+
+    int confirmedSwearsRemoved = 0;
+    for (final report in userAccusedReports) {
+      if (report.isConfirmed) {
+        confirmedSwearsRemoved += report.count;
+      }
+    }
+
+    final deletedDebtIds = existingDebts
+        .where(
+            (d) => d.debtorId == userId || deletedReportIds.contains(d.reportId))
+        .map((d) => d.id)
+        .toList();
+
+    return UserDeletionResult(
+      deletedUserId: userId,
+      deletedReportIds: deletedReportIds.toList(),
+      deletedDebtIds: deletedDebtIds,
+      swearCountDelta: -confirmedSwearsRemoved,
     );
   }
 }

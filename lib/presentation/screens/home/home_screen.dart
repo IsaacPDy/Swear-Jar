@@ -36,41 +36,50 @@ class HomeScreen extends ConsumerWidget {
     final greetingHeader = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Welcome, ${currentUser.displayName}',
-              style: GoogleFonts.outfit(
-                fontSize: isDesktop ? 22 : 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                if (isKeeper) ...[
-                  const Icon(
-                    Icons.shield_outlined,
-                    size: 13,
-                    color: AppColors.accentPrimary,
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                Text(
-                  isKeeper ? 'Active Group Keeper' : 'Member',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: isKeeper ? AppColors.accentPrimary : AppColors.textMuted,
-                    fontWeight: FontWeight.w500,
-                  ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Welcome, ${currentUser.displayName}',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: isDesktop ? 22 : 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                  color: AppColors.textPrimary,
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  if (isKeeper) ...[
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 13,
+                      color: AppColors.accentPrimary,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Flexible(
+                    child: Text(
+                      isKeeper ? 'Active Group Keeper' : 'Member',
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: isKeeper
+                            ? AppColors.accentPrimary
+                            : AppColors.textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 12),
         UserAvatar(user: currentUser, size: 42),
       ],
     );

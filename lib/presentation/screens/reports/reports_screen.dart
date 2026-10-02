@@ -34,7 +34,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         orElse: () => AppUser(
           id: uid,
           email: '',
-          displayName: 'Member ($uid)',
+          displayName: 'Former Member',
           roles: const [UserRole.member],
           status: UserStatus.approved,
           createdAt: DateTime.now(),
@@ -325,14 +325,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                                   ),
                                 ),
                               ),
-                              if (isKeeperOrAdmin) ...[
-                                const SizedBox(width: 6),
-                                const Icon(
-                                  Icons.edit_outlined,
-                                  size: 13,
-                                  color: AppColors.accentPrimary,
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -348,6 +340,37 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ),
                 ),
               ),
+              if (report.swearBreakdown.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final entry in report.swearBreakdown.entries)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color:
+                              AppColors.accentPrimary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color:
+                                AppColors.accentPrimary.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '${entry.key} ×${entry.value}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               if (report.note != null && report.note!.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(

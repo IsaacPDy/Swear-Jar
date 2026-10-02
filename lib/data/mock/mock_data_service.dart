@@ -40,6 +40,7 @@ class MockDataService
 
     final leo = AppUser(
       id: 'user_leo',
+      authUid: 'user_leo',
       email: 'leo@swearjar.app',
       displayName: 'Leo (Keeper & Admin)',
       gcashNumber: '09171112233',
@@ -51,6 +52,7 @@ class MockDataService
 
     final fiona = AppUser(
       id: 'user_fiona',
+      authUid: 'user_fiona',
       email: 'fiona@swearjar.app',
       displayName: 'Fiona',
       gcashNumber: '09172223344',
@@ -62,6 +64,7 @@ class MockDataService
 
     final sam = AppUser(
       id: 'user_sam',
+      authUid: 'user_sam',
       email: 'sam@swearjar.app',
       displayName: 'Sam',
       gcashNumber: '09183334455',
@@ -73,6 +76,7 @@ class MockDataService
 
     final alex = AppUser(
       id: 'user_alex',
+      authUid: 'user_alex',
       email: 'alex@swearjar.app',
       displayName: 'Alex (Pending)',
       gcashNumber: null,
@@ -89,6 +93,18 @@ class MockDataService
       currentRatePerSwear: 50.0,
       groupName: 'The Swear Jar Crew',
       totalSwearsAllTime: 12,
+      swearLanguages: const [
+        SwearLanguage(
+          id: 'english',
+          name: 'English',
+          swears: ['F*ck', 'Sh*t', 'B*tch', 'Damn', 'Assh*le'],
+        ),
+        SwearLanguage(
+          id: 'tagalog',
+          name: 'Tagalog',
+          swears: ['Putangina', 'Gago', 'Tangina', 'Tarantado', 'Ulol'],
+        ),
+      ],
       updatedAt: now,
     );
 
@@ -239,6 +255,7 @@ class MockDataService
     required String accusedId,
     required int count,
     String? note,
+    Map<String, int>? swearBreakdown,
     required double rateApplied,
     DateTime? swearDate,
   }) async {
@@ -249,6 +266,7 @@ class MockDataService
       accusedId: accusedId,
       count: count,
       note: note,
+      swearBreakdown: swearBreakdown ?? const {},
       rateApplied: rateApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
@@ -331,6 +349,7 @@ class MockDataService
     required int count,
     required DateTime swearDate,
     String? note,
+    Map<String, int>? swearBreakdown,
     required List<DebtObligation> existingDebts,
   }) async {
     final result = LedgerEngine.updateReport(
@@ -339,6 +358,7 @@ class MockDataService
       count: count,
       swearDate: swearDate,
       note: note,
+      swearBreakdown: swearBreakdown,
       existingDebts: _debts,
       now: DateTime.now(),
     );
@@ -561,6 +581,133 @@ class MockDataService
   }
 
   @override
+  Future<AppUser> createManualUser({
+    required String displayName,
+    String? gcashNumber,
+  }) async {
+    final now = DateTime.now();
+    final trimmedName = displayName.trim();
+    final trimmedGcash = gcashNumber?.trim();
+
+    final newUser = AppUser(
+      id: _uuid.v4(),
+      authUid: null,
+      email: '',
+      displayName: trimmedName.isEmpty ? 'Member' : trimmedName,
+      photoUrl: null,
+      gcashNumber:
+          (trimmedGcash == null || trimmedGcash.isEmpty) ? null : trimmedGcash,
+      roles: const [UserRole.member],
+      status: UserStatus.approved,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    _users.add(newUser);
+    _usersController.add(List.unmodifiable(_users));
+    return newUser;
+  }
+
+  @override
+  Future<void> assignPendingUserToExisting({
+    required String pendingUserId,
+    required String targetUserId,
+  }) async {
+    if (pendingUserId == targetUserId) return;
+
+    final pendingIdx = _users.indexWhere((u) => u.id == pendingUserId);
+    final targetIdx = _users.indexWhere((u) => u.id == targetUserId);
+    if (pendingIdx == -1 || targetIdx == -1) return;
+
+    final pendingUser = _users[pendingIdx];
+    final targetUser = _users[targetIdx];
+
+    final linkedAuthUid =
+        (pendingUser.authUid != null && pendingUser.authUid!.isNotEmpty)
+            ? pendingUser.authUid!
+            : pendingUser.id;
+
+    final updatedTarget = targetUser.copyWith(
+      authUid: linkedAuthUid,
+      email: pendingUser.email,
+      photoUrl: pendingUser.photoUrl ?? targetUser.photoUrl,
+      gcashNumber:
+          (targetUser.gcashNumber == null || targetUser.gcashNumber!.isEmpty)
+              ? pendingUser.gcashNumber
+              : targetUser.gcashNumber,
+      status: UserStatus.approved,
+      updatedAt: DateTime.now(),
+    );
+
+    _users[targetIdx] = updatedTarget;
+    _users.removeAt(pendingIdx);
+
+    if (_currentUser?.id == pendingUserId || _currentUser?.id == targetUserId) {
+      _currentUser = updatedTarget;
+      _authController.add(_currentUser);
+    }
+
+    _usersController.add(List.unmodifiable(_users));
+  }
+
+  @override
+  Future<void> unlinkUserAccount(String userId) async {
+    final idx = _users.indexWhere((u) => u.id == userId);
+    if (idx == -1) return;
+
+    final unlinked = _users[idx].copyWith(
+      clearAuthUid: true,
+      email: '',
+      clearPhotoUrl: true,
+      updatedAt: DateTime.now(),
+    );
+    _users[idx] = unlinked;
+
+    if (_currentUser?.id == userId) {
+      _currentUser = null;
+      _authController.add(null);
+    }
+
+    _usersController.add(List.unmodifiable(_users));
+  }
+
+  @override
+  Future<void> deleteUserCompletely({
+    required String userId,
+    required List<SwearReport> existingReports,
+    required List<DebtObligation> existingDebts,
+  }) async {
+    final result = LedgerEngine.deleteUserHistory(
+      userId: userId,
+      existingReports: _reports,
+      existingDebts: _debts,
+    );
+
+    _users.removeWhere((u) => u.id == userId);
+    _reports.removeWhere((r) => result.deletedReportIds.contains(r.id));
+    _debts.removeWhere((d) => result.deletedDebtIds.contains(d.id));
+
+    if (result.swearCountDelta != 0) {
+      final newTotal =
+          (_config.totalSwearsAllTime + result.swearCountDelta).clamp(0, 999999);
+      _config = _config.copyWith(
+        totalSwearsAllTime: newTotal,
+        updatedAt: DateTime.now(),
+      );
+      _configController.add(_config);
+    }
+
+    if (_currentUser?.id == userId) {
+      _currentUser = null;
+      _authController.add(null);
+    }
+
+    _usersController.add(List.unmodifiable(_users));
+    _reportsController.add(List.unmodifiable(_reports));
+    _debtsController.add(List.unmodifiable(_debts));
+  }
+
+  @override
   Stream<SystemConfig> watchConfig() async* {
     yield _config;
     yield* _configController.stream;
@@ -579,6 +726,15 @@ class MockDataService
   Future<void> updateKeeper(String newKeeperId) async {
     final oldKeeper = _config.activeKeeperId;
     await appointKeeper(newKeeperId, oldKeeper, _debts);
+  }
+
+  @override
+  Future<void> updateSwearLanguages(List<SwearLanguage> languages) async {
+    _config = _config.copyWith(
+      swearLanguages: languages,
+      updatedAt: DateTime.now(),
+    );
+    _configController.add(_config);
   }
 
   void dispose() {

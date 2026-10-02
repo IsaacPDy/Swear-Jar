@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swear_jar/domain/models/models.dart';
 import 'package:swear_jar/domain/ledger_engine.dart';
+import 'package:swear_jar/data/mock/mock_data_service.dart';
 
 void main() {
   group('LedgerEngine', () {
@@ -293,6 +294,195 @@ void main() {
       expect(delRes.deletedReportId, 'rep_del_1');
       expect(delRes.deletedDebtIds, ['debt_del_1']);
       expect(delRes.swearCountDelta, -3);
+    });
+
+    test('deleteUserHistory deletes only reports/debts where user is accused/debtor and keeps reports filed against others', () {
+      final bobAccusedConfirmed = SwearReport(
+        id: 'rep_bob_accused_1',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 4,
+        rateApplied: 50.0,
+        totalAmount: 200.0,
+        status: ReportStatus.confirmed,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      final bobAccusedPending = SwearReport(
+        id: 'rep_bob_accused_2',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 2,
+        rateApplied: 50.0,
+        totalAmount: 100.0,
+        status: ReportStatus.pending,
+        createdAt: DateTime(2026, 1, 6),
+      );
+
+      final bobReportedAlice = SwearReport(
+        id: 'rep_bob_reporter_1',
+        reporterId: memberBobId,
+        accusedId: memberAliceId,
+        count: 1,
+        rateApplied: 50.0,
+        totalAmount: 50.0,
+        status: ReportStatus.confirmed,
+        createdAt: DateTime(2026, 1, 7),
+      );
+
+      final bobDebt = DebtObligation(
+        id: 'debt_bob_1',
+        reportId: 'rep_bob_accused_1',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 200.0,
+        remainingBalance: 200.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      final aliceDebt = DebtObligation(
+        id: 'debt_alice_1',
+        reportId: 'rep_bob_reporter_1',
+        debtorId: memberAliceId,
+        recipientId: keeperId,
+        originalAmount: 50.0,
+        remainingBalance: 50.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 7),
+      );
+
+      final res = LedgerEngine.deleteUserHistory(
+        userId: memberBobId,
+        existingReports: [
+          bobAccusedConfirmed,
+          bobAccusedPending,
+          bobReportedAlice,
+        ],
+        existingDebts: [bobDebt, aliceDebt],
+      );
+
+      expect(res.deletedUserId, memberBobId);
+      expect(
+        res.deletedReportIds,
+        containsAll(['rep_bob_accused_1', 'rep_bob_accused_2']),
+      );
+      expect(res.deletedReportIds, isNot(contains('rep_bob_reporter_1')));
+      expect(res.deletedDebtIds, ['debt_bob_1']);
+      expect(res.swearCountDelta, -4);
+    });
+
+    test('MockDataService supports manual user creation, Google login assignment, account unlinking, and full user deletion', () async {
+      final service = MockDataService();
+      addTearDown(() => service.dispose());
+
+      // 1. Create a manual user
+      final manualUser = await service.createManualUser(
+        displayName: 'Marco',
+        gcashNumber: '09179998877',
+      );
+      expect(manualUser.isApproved, isTrue);
+      expect(manualUser.hasLinkedAccount, isFalse);
+      expect(manualUser.gcashNumber, '09179998877');
+
+      // 2. Submit and confirm a report against the manual user
+      final report = await service.submitReport(
+        reporterId: 'user_leo',
+        accusedId: manualUser.id,
+        count: 3,
+        rateApplied: 50.0,
+      );
+      final debtsBefore = await service.watchDebts().first;
+      await service.confirmReport(
+        report: report,
+        activeKeeperId: 'user_leo',
+        reviewerId: 'user_leo',
+        existingDebts: debtsBefore,
+      );
+
+      // 3. Assign pending Google user ('user_alex') to the manual user ('Marco')
+      await service.assignPendingUserToExisting(
+        pendingUserId: 'user_alex',
+        targetUserId: manualUser.id,
+      );
+
+      final usersAfterAssign = await service.watchUsers().first;
+      expect(usersAfterAssign.any((u) => u.id == 'user_alex'), isFalse);
+      final linkedMarco =
+          usersAfterAssign.firstWhere((u) => u.id == manualUser.id);
+      expect(linkedMarco.hasLinkedAccount, isTrue);
+      expect(linkedMarco.email, 'alex@swearjar.app');
+      expect(linkedMarco.authUid, 'user_alex');
+      expect(linkedMarco.displayName, 'Marco');
+
+      // 4. Unlink Google account from Marco (keep profile and history)
+      await service.unlinkUserAccount(manualUser.id);
+      final usersAfterUnlink = await service.watchUsers().first;
+      final unlinkedMarco =
+          usersAfterUnlink.firstWhere((u) => u.id == manualUser.id);
+      expect(unlinkedMarco.hasLinkedAccount, isFalse);
+      expect(unlinkedMarco.email, isEmpty);
+      expect(unlinkedMarco.authUid, isNull);
+
+      final reportsAfterUnlink = await service.watchReports().first;
+      expect(reportsAfterUnlink.any((r) => r.id == report.id), isTrue);
+
+      // 5. Delete Marco completely (wipe profile and history)
+      final debtsBeforeDelete = await service.watchDebts().first;
+      await service.deleteUserCompletely(
+        userId: manualUser.id,
+        existingReports: reportsAfterUnlink,
+        existingDebts: debtsBeforeDelete,
+      );
+
+      final usersAfterDelete = await service.watchUsers().first;
+      final reportsAfterDelete = await service.watchReports().first;
+      final debtsAfterDelete = await service.watchDebts().first;
+      expect(usersAfterDelete.any((u) => u.id == manualUser.id), isFalse);
+      expect(reportsAfterDelete.any((r) => r.accusedId == manualUser.id), isFalse);
+      expect(debtsAfterDelete.any((d) => d.debtorId == manualUser.id), isFalse);
+    });
+
+    test('SwearLanguage and SwearReport swearBreakdown serialize and persist in MockDataService', () async {
+      final service = MockDataService();
+      addTearDown(() => service.dispose());
+
+      final initialConfig = await service.watchConfig().first;
+      expect(initialConfig.swearLanguages, isNotEmpty);
+
+      final customLanguages = [
+        ...initialConfig.swearLanguages,
+        const SwearLanguage(
+          id: 'bisaya',
+          name: 'Bisaya',
+          swears: ['Yawa', 'Atay', 'Piste'],
+        ),
+      ];
+      await service.updateSwearLanguages(customLanguages);
+
+      final updatedConfig = await service.watchConfig().first;
+      expect(
+        updatedConfig.swearLanguages.any((l) => l.name == 'Bisaya'),
+        isTrue,
+      );
+      final bisaya =
+          updatedConfig.swearLanguages.firstWhere((l) => l.name == 'Bisaya');
+      expect(bisaya.swears, ['Yawa', 'Atay', 'Piste']);
+
+      final submitted = await service.submitReport(
+        reporterId: 'user_fiona',
+        accusedId: 'user_sam',
+        count: 4,
+        note: 'Ranked match',
+        swearBreakdown: const {'Yawa': 2, 'Piste': 1},
+        rateApplied: 50.0,
+      );
+
+      expect(submitted.count, 4);
+      expect(submitted.swearBreakdown, {'Yawa': 2, 'Piste': 1});
+
+      final roundTrip = SwearReport.fromMap(submitted.toMap());
+      expect(roundTrip.swearBreakdown, {'Yawa': 2, 'Piste': 1});
     });
   });
 }

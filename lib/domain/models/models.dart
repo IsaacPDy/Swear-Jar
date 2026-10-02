@@ -42,6 +42,7 @@ enum UserStatus {
 
 class AppUser {
   final String id;
+  final String? authUid;
   final String email;
   final String displayName;
   final String? photoUrl;
@@ -53,6 +54,7 @@ class AppUser {
 
   const AppUser({
     required this.id,
+    this.authUid,
     required this.email,
     required this.displayName,
     this.photoUrl,
@@ -69,12 +71,17 @@ class AppUser {
   bool get isAdmin => roles.contains(UserRole.admin);
   bool get isKeeper => roles.contains(UserRole.keeper);
   bool get isMember => roles.contains(UserRole.member);
+  bool get hasLinkedAccount =>
+      (authUid != null && authUid!.isNotEmpty) || email.isNotEmpty;
 
   AppUser copyWith({
     String? id,
+    String? authUid,
+    bool clearAuthUid = false,
     String? email,
     String? displayName,
     String? photoUrl,
+    bool clearPhotoUrl = false,
     String? gcashNumber,
     List<UserRole>? roles,
     UserStatus? status,
@@ -83,9 +90,10 @@ class AppUser {
   }) {
     return AppUser(
       id: id ?? this.id,
+      authUid: clearAuthUid ? null : (authUid ?? this.authUid),
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
-      photoUrl: photoUrl ?? this.photoUrl,
+      photoUrl: clearPhotoUrl ? null : (photoUrl ?? this.photoUrl),
       gcashNumber: gcashNumber ?? this.gcashNumber,
       roles: roles ?? List.from(this.roles),
       status: status ?? this.status,
@@ -97,6 +105,7 @@ class AppUser {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'authUid': authUid,
       'email': email,
       'displayName': displayName,
       'photoUrl': photoUrl,
@@ -109,9 +118,22 @@ class AppUser {
   }
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String? id}) {
+    final resolvedId = id ?? map['id'] as String? ?? '';
+    final resolvedEmail = map['email'] as String? ?? '';
+    final String? resolvedAuthUid;
+    if (map.containsKey('authUid')) {
+      final rawAuthUid = map['authUid'] as String?;
+      resolvedAuthUid =
+          (rawAuthUid != null && rawAuthUid.isNotEmpty) ? rawAuthUid : null;
+    } else {
+      // Backward compatibility for existing users created before authUid was added
+      resolvedAuthUid = resolvedEmail.isNotEmpty ? resolvedId : null;
+    }
+
     return AppUser(
-      id: id ?? map['id'] as String? ?? '',
-      email: map['email'] as String? ?? '',
+      id: resolvedId,
+      authUid: resolvedAuthUid,
+      email: resolvedEmail,
       displayName: map['displayName'] as String? ?? 'Unnamed User',
       photoUrl: map['photoUrl'] as String?,
       gcashNumber: map['gcashNumber'] as String?,
@@ -168,6 +190,7 @@ class SwearReport {
   final String accusedId;
   final int count;
   final String? note;
+  final Map<String, int> swearBreakdown;
   final double rateApplied;
   final double totalAmount;
   final ReportStatus status;
@@ -183,6 +206,7 @@ class SwearReport {
     required this.accusedId,
     required this.count,
     this.note,
+    this.swearBreakdown = const {},
     required this.rateApplied,
     required this.totalAmount,
     required this.status,
@@ -204,6 +228,7 @@ class SwearReport {
     int? count,
     String? note,
     bool clearNote = false,
+    Map<String, int>? swearBreakdown,
     double? rateApplied,
     double? totalAmount,
     ReportStatus? status,
@@ -219,6 +244,7 @@ class SwearReport {
       accusedId: accusedId ?? this.accusedId,
       count: count ?? this.count,
       note: clearNote ? null : (note ?? this.note),
+      swearBreakdown: swearBreakdown ?? Map<String, int>.from(this.swearBreakdown),
       rateApplied: rateApplied ?? this.rateApplied,
       totalAmount: totalAmount ?? this.totalAmount,
       status: status ?? this.status,
@@ -237,6 +263,7 @@ class SwearReport {
       'accusedId': accusedId,
       'count': count,
       'note': note,
+      'swearBreakdown': swearBreakdown,
       'rateApplied': rateApplied,
       'totalAmount': totalAmount,
       'status': status.toStr(),
@@ -260,12 +287,25 @@ class SwearReport {
         ? DateTime.tryParse(map['swearDate'].toString()) ?? parsedCreatedAt
         : parsedCreatedAt;
 
+    final rawBreakdown = map['swearBreakdown'];
+    final parsedBreakdown = <String, int>{};
+    if (rawBreakdown is Map) {
+      rawBreakdown.forEach((key, value) {
+        final k = key.toString().trim();
+        final v = (value as num?)?.toInt() ?? 0;
+        if (k.isNotEmpty && v > 0) {
+          parsedBreakdown[k] = v;
+        }
+      });
+    }
+
     return SwearReport(
       id: id ?? map['id'] as String? ?? '',
       reporterId: map['reporterId'] as String? ?? '',
       accusedId: map['accusedId'] as String? ?? '',
       count: countVal,
       note: map['note'] as String?,
+      swearBreakdown: parsedBreakdown,
       rateApplied: rateVal,
       totalAmount: totalVal,
       status: ReportStatus.fromString(map['status'] as String? ?? 'pending'),
@@ -467,11 +507,83 @@ class DebtObligation {
   int get hashCode => id.hashCode;
 }
 
+class SwearLanguage {
+  final String id;
+  final String name;
+  final List<String> swears;
+
+  const SwearLanguage({
+    required this.id,
+    required this.name,
+    this.swears = const [],
+  });
+
+  SwearLanguage copyWith({
+    String? id,
+    String? name,
+    List<String>? swears,
+  }) {
+    return SwearLanguage(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      swears: swears ?? List<String>.from(this.swears),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'swears': swears,
+    };
+  }
+
+  factory SwearLanguage.fromMap(Map<String, dynamic> map) {
+    final rawSwears = map['swears'];
+    final parsedSwears = <String>[];
+    if (rawSwears is List) {
+      for (final item in rawSwears) {
+        final s = item.toString().trim();
+        if (s.isNotEmpty && !parsedSwears.contains(s)) {
+          parsedSwears.add(s);
+        }
+      }
+    }
+    final nameStr = map['name'] as String? ?? 'Language';
+    return SwearLanguage(
+      id: map['id'] as String? ?? nameStr.toLowerCase().replaceAll(' ', '_'),
+      name: nameStr,
+      swears: parsedSwears,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SwearLanguage || runtimeType != other.runtimeType) {
+      return false;
+    }
+    if (id != other.id ||
+        name != other.name ||
+        swears.length != other.swears.length) {
+      return false;
+    }
+    for (var i = 0; i < swears.length; i++) {
+      if (swears[i] != other.swears[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, Object.hashAll(swears));
+}
+
 class SystemConfig {
   final String activeKeeperId;
   final double currentRatePerSwear;
   final String groupName;
   final int totalSwearsAllTime;
+  final List<SwearLanguage> swearLanguages;
   final DateTime updatedAt;
 
   const SystemConfig({
@@ -479,6 +591,7 @@ class SystemConfig {
     this.currentRatePerSwear = 50.0,
     this.groupName = 'Our Friend Group',
     this.totalSwearsAllTime = 0,
+    this.swearLanguages = const [],
     required this.updatedAt,
   });
 
@@ -487,6 +600,7 @@ class SystemConfig {
     double? currentRatePerSwear,
     String? groupName,
     int? totalSwearsAllTime,
+    List<SwearLanguage>? swearLanguages,
     DateTime? updatedAt,
   }) {
     return SystemConfig(
@@ -494,6 +608,8 @@ class SystemConfig {
       currentRatePerSwear: currentRatePerSwear ?? this.currentRatePerSwear,
       groupName: groupName ?? this.groupName,
       totalSwearsAllTime: totalSwearsAllTime ?? this.totalSwearsAllTime,
+      swearLanguages:
+          swearLanguages ?? List<SwearLanguage>.from(this.swearLanguages),
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -504,17 +620,31 @@ class SystemConfig {
       'currentRatePerSwear': currentRatePerSwear,
       'groupName': groupName,
       'totalSwearsAllTime': totalSwearsAllTime,
+      'swearLanguages': swearLanguages.map((l) => l.toMap()).toList(),
       'updatedAt': updatedAt.toIso8601String(),
     };
   }
 
   factory SystemConfig.fromMap(Map<String, dynamic> map) {
+    final rawLanguages = map['swearLanguages'];
+    final parsedLanguages = <SwearLanguage>[];
+    if (rawLanguages is List) {
+      for (final item in rawLanguages) {
+        if (item is Map) {
+          parsedLanguages.add(
+            SwearLanguage.fromMap(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+
     return SystemConfig(
       activeKeeperId: map['activeKeeperId'] as String? ?? '',
       currentRatePerSwear:
           (map['currentRatePerSwear'] as num?)?.toDouble() ?? 50.0,
       groupName: map['groupName'] as String? ?? 'Our Friend Group',
       totalSwearsAllTime: (map['totalSwearsAllTime'] as num?)?.toInt() ?? 0,
+      swearLanguages: parsedLanguages,
       updatedAt: map['updatedAt'] != null
           ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

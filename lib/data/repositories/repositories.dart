@@ -55,8 +55,19 @@ abstract class ILedgerRepository {
     required String recordedBy,
     String? note,
   });
+  Future<List<DebtObligation>> recordMemberPayment({
+    required List<DebtObligation> activeDebts,
+    required double amount,
+    required String recordedBy,
+    String? note,
+  });
   Future<DebtObligation> dismissTransferredDebt({
     required DebtObligation debt,
+    required String dismissedBy,
+    String? reason,
+  });
+  Future<List<DebtObligation>> dismissMemberTransferredDebts({
+    required List<DebtObligation> activeDebts,
     required String dismissedBy,
     String? reason,
   });

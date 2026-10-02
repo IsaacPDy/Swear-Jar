@@ -281,12 +281,23 @@ class StatusPill extends StatelessWidget {
     }
   }
 
-  factory StatusPill.fromDebt(DebtStatus status, {bool isTransferred = false}) {
+  factory StatusPill.fromDebt(
+    DebtStatus status, {
+    bool isTransferred = false,
+    bool isPartiallyPaid = false,
+  }) {
     if (isTransferred && status == DebtStatus.active) {
-      return const StatusPill(
-        label: 'Transferred',
+      return StatusPill(
+        label: isPartiallyPaid ? 'Partial Bounty' : 'Transferred',
         color: AppColors.accentInfo,
         icon: Icons.swap_horiz,
+      );
+    }
+    if (isPartiallyPaid && status == DebtStatus.active) {
+      return const StatusPill(
+        label: 'Partial Paid',
+        color: AppColors.accentWarning,
+        icon: Icons.pie_chart_outline_rounded,
       );
     }
     switch (status) {
@@ -304,7 +315,7 @@ class StatusPill extends StatelessWidget {
         );
       case DebtStatus.active:
         return const StatusPill(
-          label: 'Active Debt',
+          label: 'To Be Received',
           color: AppColors.accentPrimary,
           icon: Icons.pending_actions,
         );
@@ -325,13 +336,16 @@ class StatusPill extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: color,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.1,
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                color: color,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
             ),
           ),
         ],

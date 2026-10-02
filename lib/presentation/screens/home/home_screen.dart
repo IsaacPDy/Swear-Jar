@@ -22,6 +22,7 @@ class HomeScreen extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final keeper = ref.watch(activeKeeperProvider);
     final myTotalDebt = ref.watch(myTotalDebtAmountProvider);
+    final myTotalCollected = ref.watch(myTotalCollectedAmountProvider);
     final myDebts = ref.watch(myDebtsProvider);
     final transferredDebts = ref.watch(transferredDebtsOwedToMeProvider);
     final config = ref.watch(systemConfigProvider).valueOrNull;
@@ -107,6 +108,7 @@ class HomeScreen extends ConsumerWidget {
     final balanceCard = _buildBalanceCard(
       context: context,
       myTotalDebt: myTotalDebt,
+      myTotalCollected: myTotalCollected,
       keeper: keeper,
     );
 
@@ -469,8 +471,10 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildBalanceCard({
     required BuildContext context,
     required double myTotalDebt,
+    required double myTotalCollected,
     required AppUser? keeper,
   }) {
+    final isPartiallyPaid = myTotalDebt > 0.001 && myTotalCollected > 0.001;
     return NeonCard(
       hasGlow: myTotalDebt > 0,
       borderColor: myTotalDebt > 0
@@ -496,7 +500,13 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (myTotalDebt > 0)
+              if (isPartiallyPaid)
+                const StatusPill(
+                  label: 'Partial Paid',
+                  color: AppColors.accentWarning,
+                  icon: Icons.pie_chart_outline_rounded,
+                )
+              else if (myTotalDebt > 0)
                 const StatusPill(
                   label: 'Obligation Active',
                   color: AppColors.accentPrimary,
@@ -511,11 +521,61 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          CurrencyText(
-            amount: myTotalDebt,
-            fontSize: 38,
-            fontWeight: FontWeight.w800,
-            color: myTotalDebt > 0 ? Colors.white : AppColors.accentMint,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TO PAY',
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    CurrencyText(
+                      amount: myTotalDebt,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      color: myTotalDebt > 0 ? Colors.white : AppColors.accentMint,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 44,
+                color: AppColors.borderDefault,
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PAID ALREADY',
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: AppColors.accentMint,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    CurrencyText(
+                      amount: myTotalCollected,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.accentMint,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           const Divider(color: AppColors.borderDefault, height: 1),
@@ -780,7 +840,9 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Original: ₱${debt.originalAmount.toStringAsFixed(0)}',
+                            debt.collectedAmount > 0
+                                ? 'Original: ₱${debt.originalAmount.toStringAsFixed(0)} • Paid: ₱${debt.collectedAmount.toStringAsFixed(0)}'
+                                : 'Original: ₱${debt.originalAmount.toStringAsFixed(0)}',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -801,6 +863,7 @@ class HomeScreen extends ConsumerWidget {
                         StatusPill.fromDebt(
                           debt.status,
                           isTransferred: debt.isTransferred,
+                          isPartiallyPaid: debt.isPartiallyPaid,
                         ),
                       ],
                     ),

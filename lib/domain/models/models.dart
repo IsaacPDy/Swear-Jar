@@ -423,6 +423,30 @@ class DebtObligation {
   bool get isPaid => status == DebtStatus.paid;
   bool get isDismissed => status == DebtStatus.dismissed;
 
+  /// Actual payment amount collected toward this obligation (excluding Keeper-swear auto-offsets and dismissed write-offs).
+  double get collectedAmount {
+    final maxPossible =
+        (originalAmount - remainingBalance).clamp(0.0, originalAmount);
+    if (payments.isEmpty) {
+      return isDismissed ? 0.0 : maxPossible;
+    }
+
+    final realPayments = payments
+        .where((p) => p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET')
+        .toList();
+    if (realPayments.isEmpty) return 0.0;
+
+    final effectivePayments = isDismissed && realPayments.isNotEmpty
+        ? realPayments.sublist(0, realPayments.length - 1)
+        : realPayments;
+
+    final sum = effectivePayments.fold<double>(0.0, (acc, p) => acc + p.amount);
+    return sum.clamp(0.0, maxPossible);
+  }
+
+  bool get isPartiallyPaid =>
+      isActive && collectedAmount > 0.001 && remainingBalance > 0.001;
+
   DebtObligation copyWith({
     String? id,
     String? reportId,
@@ -505,6 +529,64 @@ class DebtObligation {
 
   @override
   int get hashCode => id.hashCode;
+}
+
+class MemberLedgerSummary {
+  final String debtorId;
+  final String recipientId;
+  final bool isTransferred;
+  final double totalIncurred;
+  final double collectedAlready;
+  final double toBeReceived;
+  final List<DebtObligation> debts;
+  final DateTime? lastActivityAt;
+
+  const MemberLedgerSummary({
+    required this.debtorId,
+    required this.recipientId,
+    this.isTransferred = false,
+    required this.totalIncurred,
+    required this.collectedAlready,
+    required this.toBeReceived,
+    this.debts = const [],
+    this.lastActivityAt,
+  });
+
+  List<DebtObligation> get activeDebts =>
+      debts.where((d) => d.isActive && d.remainingBalance > 0.001).toList();
+
+  bool get hasActiveBalance => toBeReceived > 0.001;
+  bool get isPartiallyPaid =>
+      toBeReceived > 0.001 && collectedAlready > 0.001;
+  bool get isSettled => toBeReceived <= 0.001 && collectedAlready > 0.001;
+
+  double get collectionProgress {
+    final denom = collectedAlready + toBeReceived;
+    if (denom <= 0.001) return 0.0;
+    return (collectedAlready / denom).clamp(0.0, 1.0);
+  }
+}
+
+class PaymentHistoryItem {
+  final String id;
+  final String debtorId;
+  final String recipientId;
+  final double amount;
+  final String recordedBy;
+  final DateTime recordedAt;
+  final String? note;
+  final bool isPartial;
+
+  const PaymentHistoryItem({
+    required this.id,
+    required this.debtorId,
+    required this.recipientId,
+    required this.amount,
+    required this.recordedBy,
+    required this.recordedAt,
+    this.note,
+    this.isPartial = false,
+  });
 }
 
 class SwearLanguage {
@@ -651,3 +733,50 @@ class SystemConfig {
     );
   }
 }
+
+class SwearPersonStat {
+  final String userId;
+  final int swearCount;
+  final int reportCount;
+  final double totalAmount;
+  final double shareOfSwears;
+
+  const SwearPersonStat({
+    required this.userId,
+    required this.swearCount,
+    required this.reportCount,
+    required this.totalAmount,
+    required this.shareOfSwears,
+  });
+}
+
+class SwearWordStat {
+  final String word;
+  final int count;
+  final double shareOfWords;
+  final bool isUnspecified;
+
+  const SwearWordStat({
+    required this.word,
+    required this.count,
+    required this.shareOfWords,
+    this.isUnspecified = false,
+  });
+}
+
+class ReportAnalyticsSummary {
+  final int totalSwears;
+  final int totalReports;
+  final double totalPenaltyAmount;
+  final List<SwearPersonStat> peopleStats;
+  final List<SwearWordStat> wordStats;
+
+  const ReportAnalyticsSummary({
+    required this.totalSwears,
+    required this.totalReports,
+    required this.totalPenaltyAmount,
+    this.peopleStats = const [],
+    this.wordStats = const [],
+  });
+}
+

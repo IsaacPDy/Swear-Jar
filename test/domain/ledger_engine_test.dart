@@ -484,5 +484,213 @@ void main() {
       final roundTrip = SwearReport.fromMap(submitted.toMap());
       expect(roundTrip.swearBreakdown, {'Yawa': 2, 'Piste': 1});
     });
+
+    test('recordMemberPayment distributes partial payment across oldest active debts (FIFO) and updates MemberLedgerSummary', () {
+      final debtOld = DebtObligation(
+        id: 'debt_old',
+        reportId: 'rep_old',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 100.0,
+        remainingBalance: 100.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 1),
+      );
+
+      final debtNew = DebtObligation(
+        id: 'debt_new',
+        reportId: 'rep_new',
+        debtorId: memberBobId,
+        recipientId: keeperId,
+        originalAmount: 100.0,
+        remainingBalance: 100.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 1, 5),
+      );
+
+      // Bob owes 200 total across 2 debts. Record a partial payment of 130.
+      final updated = LedgerEngine.recordMemberPayment(
+        activeDebts: [debtNew, debtOld],
+        amount: 130.0,
+        recordedBy: keeperId,
+        note: 'Partial GCash payment',
+      );
+
+      expect(updated.length, 2);
+      final updatedOld = updated.firstWhere((d) => d.id == 'debt_old');
+      final updatedNew = updated.firstWhere((d) => d.id == 'debt_new');
+
+      // Oldest debt (100) is fully paid
+      expect(updatedOld.status, DebtStatus.paid);
+      expect(updatedOld.remainingBalance, 0.0);
+      expect(updatedOld.collectedAmount, 100.0);
+
+      // Newer debt (100) has 30 paid and 70 remaining
+      expect(updatedNew.status, DebtStatus.active);
+      expect(updatedNew.remainingBalance, 70.0);
+      expect(updatedNew.collectedAmount, 30.0);
+      expect(updatedNew.isPartiallyPaid, isTrue);
+
+      // Build per-member ledger summary across both debts
+      final summaries = LedgerEngine.buildMemberLedgerSummaries(
+        allDebts: [updatedOld, updatedNew],
+        defaultRecipientId: keeperId,
+        groupByRecipientAndTransfer: false,
+      );
+
+      expect(summaries.length, 1);
+      final bobSummary = summaries.first;
+      expect(bobSummary.debtorId, memberBobId);
+      expect(bobSummary.toBeReceived, 70.0);
+      expect(bobSummary.collectedAlready, 130.0);
+      expect(bobSummary.totalIncurred, 200.0);
+      expect(bobSummary.isPartiallyPaid, isTrue);
+      expect(bobSummary.isSettled, isFalse);
+    });
+
+    test('collectedAmount excludes Keeper swear auto-offset and dismissed forgiveness write-offs', () {
+      // 1. Auto-cancelled debt when reporter caught Keeper swearing
+      final cancelledDebt = DebtObligation(
+        id: 'debt_cancelled',
+        reportId: 'rep_c',
+        debtorId: memberAliceId,
+        recipientId: keeperId,
+        originalAmount: 50.0,
+        remainingBalance: 0.0,
+        status: DebtStatus.paid,
+        payments: [
+          PaymentRecord(
+            id: 'p_offset',
+            debtId: 'debt_cancelled',
+            amount: 50.0,
+            recordedBy: 'SYSTEM_KEEPER_SWEAR_OFFSET',
+            recordedAt: DateTime(2026, 1, 2),
+          ),
+        ],
+        createdAt: DateTime(2026, 1, 1),
+      );
+      expect(cancelledDebt.collectedAmount, 0.0);
+
+      // 2. Transferred debt with 40 partial payment, then remaining 60 dismissed
+      final transferredDebt = DebtObligation(
+        id: 'debt_trans',
+        reportId: 'rep_t',
+        debtorId: memberBobId,
+        recipientId: memberAliceId,
+        originalAmount: 100.0,
+        remainingBalance: 100.0,
+        status: DebtStatus.active,
+        isTransferred: true,
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final partiallyPaid = LedgerEngine.recordPayment(
+        debt: transferredDebt,
+        amount: 40.0,
+        recordedBy: memberAliceId,
+      );
+      final dismissedAfterPartial = LedgerEngine.dismissTransferredDebt(
+        debt: partiallyPaid,
+        dismissedBy: memberAliceId,
+      );
+
+      // Only the 40 partial payment was actually collected; the 60 dismissal was forgiven
+      expect(dismissedAfterPartial.collectedAmount, 40.0);
+    });
+
+    test('extractReportMonths and computeReportAnalytics calculate people who swore and words said accurately', () {
+      final r1 = SwearReport(
+        id: 'r1',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 3,
+        swearBreakdown: const {'Fuck': 2}, // 1 unspecified
+        rateApplied: 50.0,
+        totalAmount: 150.0,
+        status: ReportStatus.confirmed,
+        swearDate: DateTime(2025, 11, 15),
+        createdAt: DateTime(2025, 11, 15),
+      );
+
+      final r2 = SwearReport(
+        id: 'r2',
+        reporterId: memberBobId,
+        accusedId: memberAliceId,
+        count: 2,
+        swearBreakdown: const {'fuck': 1, 'Shit': 1},
+        rateApplied: 50.0,
+        totalAmount: 100.0,
+        status: ReportStatus.pending,
+        swearDate: DateTime(2026, 3, 10),
+        createdAt: DateTime(2026, 3, 10),
+      );
+
+      final r3Rejected = SwearReport(
+        id: 'r3',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 5,
+        swearBreakdown: const {'Damn': 5},
+        rateApplied: 50.0,
+        totalAmount: 250.0,
+        status: ReportStatus.rejected,
+        swearDate: DateTime(2026, 3, 12),
+        createdAt: DateTime(2026, 3, 12),
+      );
+
+      final months = LedgerEngine.extractReportMonths(
+        [r1, r2, r3Rejected],
+        now: DateTime(2026, 3, 20),
+      );
+
+      // Should include Jan, Feb, Mar 2026 plus Nov 2025, sorted newest first
+      expect(months.map(LedgerEngine.monthKey).toList(), [
+        '2026-03',
+        '2026-02',
+        '2026-01',
+        '2025-11',
+      ]);
+
+      // Default analytics (excludes rejected r3)
+      final summary =
+          LedgerEngine.computeReportAnalytics([r1, r2, r3Rejected]);
+      expect(summary.totalReports, 2);
+      expect(summary.totalSwears, 5);
+      expect(summary.totalPenaltyAmount, 250.0);
+
+      // People stats: Bob (3 swears), Alice (2 swears)
+      expect(summary.peopleStats.length, 2);
+      expect(summary.peopleStats.first.userId, memberBobId);
+      expect(summary.peopleStats.first.swearCount, 3);
+      expect(summary.peopleStats.first.reportCount, 1);
+      expect(summary.peopleStats.first.totalAmount, 150.0);
+      expect(summary.peopleStats.first.shareOfSwears, closeTo(0.6, 0.001));
+
+      expect(summary.peopleStats.last.userId, memberAliceId);
+      expect(summary.peopleStats.last.swearCount, 2);
+      expect(summary.peopleStats.last.shareOfSwears, closeTo(0.4, 0.001));
+
+      // Words stats: 'Fuck' (2 + 1 = 3, case-insensitive), 'Shit' (1), 'Unspecified / Other' (1)
+      expect(summary.wordStats.length, 3);
+      expect(summary.wordStats[0].word, 'Fuck');
+      expect(summary.wordStats[0].count, 3);
+      expect(summary.wordStats[0].isUnspecified, isFalse);
+
+      expect(summary.wordStats[1].word, 'Shit');
+      expect(summary.wordStats[1].count, 1);
+
+      expect(summary.wordStats[2].word, 'Unspecified / Other');
+      expect(summary.wordStats[2].count, 1);
+      expect(summary.wordStats[2].isUnspecified, isTrue);
+
+      // When includeRejected is true on r3Rejected
+      final rejectedSummary = LedgerEngine.computeReportAnalytics(
+        [r3Rejected],
+        includeRejected: true,
+      );
+      expect(rejectedSummary.totalSwears, 5);
+      expect(rejectedSummary.wordStats.first.word, 'Damn');
+      expect(rejectedSummary.wordStats.first.count, 5);
+    });
   });
 }
+

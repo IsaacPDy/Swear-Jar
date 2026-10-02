@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swear_jar/data/mock/mock_data_service.dart';
 import 'package:swear_jar/data/services/firebase_service.dart';
 import 'package:swear_jar/data/repositories/repositories.dart';
+import 'package:swear_jar/domain/ledger_engine.dart';
 import 'package:swear_jar/domain/models/models.dart';
 
 final firebaseInitErrorProvider = StateProvider<String?>((ref) => null);
@@ -120,9 +121,48 @@ final myTotalDebtAmountProvider = Provider<double>((ref) {
   return myDebts.fold<double>(0.0, (sum, debt) => sum + debt.remainingBalance);
 });
 
+final myTotalCollectedAmountProvider = Provider<double>((ref) {
+  final user = ref.watch(currentUserProvider).valueOrNull;
+  if (user == null) return 0.0;
+  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  return allDebts
+      .where((d) => d.debtorId == user.id)
+      .fold<double>(0.0, (sum, debt) => sum + debt.collectedAmount);
+});
+
 final groupTotalActiveDebtProvider = Provider<double>((ref) {
   final debts = ref.watch(activeDebtsProvider);
   return debts.fold<double>(0.0, (sum, debt) => sum + debt.remainingBalance);
+});
+
+final groupTotalCollectedProvider = Provider<double>((ref) {
+  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  return allDebts.fold<double>(0.0, (sum, debt) => sum + debt.collectedAmount);
+});
+
+final activeMemberBalancesProvider = Provider<List<MemberLedgerSummary>>((ref) {
+  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final keeper = ref.watch(activeKeeperProvider);
+  return LedgerEngine.buildMemberLedgerSummaries(
+    allDebts: allDebts,
+    defaultRecipientId: keeper?.id ?? '',
+    groupByRecipientAndTransfer: true,
+  ).where((s) => s.hasActiveBalance).toList();
+});
+
+final memberLedgerHistoryProvider = Provider<List<MemberLedgerSummary>>((ref) {
+  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final keeper = ref.watch(activeKeeperProvider);
+  return LedgerEngine.buildMemberLedgerSummaries(
+    allDebts: allDebts,
+    defaultRecipientId: keeper?.id ?? '',
+    groupByRecipientAndTransfer: false,
+  );
+});
+
+final paymentHistoryProvider = Provider<List<PaymentHistoryItem>>((ref) {
+  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  return LedgerEngine.buildPaymentHistory(allDebts: allDebts);
 });
 
 final transferredDebtsOwedToMeProvider = Provider<List<DebtObligation>>((ref) {

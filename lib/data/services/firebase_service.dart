@@ -772,6 +772,34 @@ class FirebaseDataService
   }
 
   @override
+  Future<List<DebtObligation>> recordMemberPayment({
+    required List<DebtObligation> activeDebts,
+    required double amount,
+    required String recordedBy,
+    String? note,
+  }) async {
+    final updatedDebts = LedgerEngine.recordMemberPayment(
+      activeDebts: activeDebts,
+      amount: amount,
+      recordedBy: recordedBy,
+      note: note,
+    );
+
+    if (updatedDebts.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final updated in updatedDebts) {
+        batch.set(
+          _firestore.collection('debts').doc(updated.id),
+          updated.toMap(),
+        );
+      }
+      await batch.commit();
+    }
+
+    return updatedDebts;
+  }
+
+  @override
   Future<DebtObligation> dismissTransferredDebt({
     required DebtObligation debt,
     required String dismissedBy,
@@ -789,6 +817,32 @@ class FirebaseDataService
         .set(updatedDebt.toMap());
 
     return updatedDebt;
+  }
+
+  @override
+  Future<List<DebtObligation>> dismissMemberTransferredDebts({
+    required List<DebtObligation> activeDebts,
+    required String dismissedBy,
+    String? reason,
+  }) async {
+    final dismissedDebts = LedgerEngine.dismissMemberTransferredDebts(
+      activeDebts: activeDebts,
+      dismissedBy: dismissedBy,
+      reason: reason,
+    );
+
+    if (dismissedDebts.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final dismissed in dismissedDebts) {
+        batch.set(
+          _firestore.collection('debts').doc(dismissed.id),
+          dismissed.toMap(),
+        );
+      }
+      await batch.commit();
+    }
+
+    return dismissedDebts;
   }
 
   @override

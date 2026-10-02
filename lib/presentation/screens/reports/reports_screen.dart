@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:swear_jar/presentation/theme/app_theme.dart';
 import 'package:swear_jar/presentation/providers/providers.dart';
+import 'package:swear_jar/domain/ledger_engine.dart';
 import 'package:swear_jar/domain/models/models.dart';
 import 'package:swear_jar/presentation/widgets/common_widgets.dart';
 
@@ -17,6 +18,8 @@ class ReportsScreen extends ConsumerStatefulWidget {
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   String _selectedFilter = 'all';
+  String _selectedMonthKey = 'all';
+  bool _showAnalytics = true;
 
   @override
   Widget build(BuildContext context) {
@@ -43,12 +46,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       );
     }
 
-    final filteredReports = reports.where((r) {
+    final availableMonths = LedgerEngine.extractReportMonths(reports);
+    if (_selectedMonthKey != 'all' &&
+        !availableMonths
+            .any((m) => LedgerEngine.monthKey(m) == _selectedMonthKey)) {
+      _selectedMonthKey = 'all';
+    }
+
+    final monthFilteredReports = _selectedMonthKey == 'all'
+        ? reports
+        : reports
+            .where((r) => LedgerEngine.monthKey(r.swearDate) == _selectedMonthKey)
+            .toList();
+
+    final filteredReports = monthFilteredReports.where((r) {
       if (_selectedFilter == 'pending') return r.isPending;
       if (_selectedFilter == 'confirmed') return r.isConfirmed;
       if (_selectedFilter == 'rejected') return r.isRejected;
       return true;
     }).toList();
+
+    final analytics = LedgerEngine.computeReportAnalytics(
+      filteredReports,
+      includeRejected: _selectedFilter == 'rejected',
+    );
+
+    String selectedMonthDisplay = 'All Months';
+    if (_selectedMonthKey != 'all') {
+      final matched = availableMonths.firstWhere(
+        (m) => LedgerEngine.monthKey(m) == _selectedMonthKey,
+        orElse: () => DateTime.now(),
+      );
+      selectedMonthDisplay = DateFormat('MMMM yyyy').format(matched);
+    }
+
+    final hPad = isDesktop ? 32.0 : 16.0;
 
     return Scaffold(
       body: SafeArea(
@@ -61,9 +93,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               children: [
                 Padding(
                   padding: EdgeInsets.fromLTRB(
-                    isDesktop ? 32 : 16,
+                    hPad,
                     isDesktop ? 28 : 16,
-                    isDesktop ? 32 : 16,
+                    hPad,
                     14,
                   ),
                   child: Column(
@@ -90,23 +122,71 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Audit submitted swear incidents, review pending reports, and manage ledger records.',
+                        'Audit submitted swear incidents, filter by month, and review analytics of words said and people who swore.',
                         style: GoogleFonts.inter(
                           fontSize: 13.5,
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      // Month Filter Row
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            _buildFilterChip('All (${reports.length})', 'all'),
+                            const Icon(
+                              Icons.calendar_month_outlined,
+                              size: 15,
+                              color: AppColors.accentGoldMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildMonthChip(
+                              'All Months',
+                              'all',
+                              hasReports: reports.isNotEmpty,
+                            ),
+                            for (final monthDate in availableMonths) ...[
+                              const SizedBox(width: 6),
+                              Builder(
+                                builder: (context) {
+                                  final mKey = LedgerEngine.monthKey(monthDate);
+                                  final countInMonth = reports
+                                      .where((r) =>
+                                          LedgerEngine.monthKey(r.swearDate) ==
+                                          mKey)
+                                      .length;
+                                  final shortLabel =
+                                      DateFormat('MMM yyyy').format(monthDate);
+                                  final chipText = countInMonth > 0
+                                      ? '$shortLabel ($countInMonth)'
+                                      : shortLabel;
+                                  return _buildMonthChip(
+                                    chipText,
+                                    mKey,
+                                    hasReports: countInMonth > 0,
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Status Filter Row
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip(
+                              'All (${monthFilteredReports.length})',
+                              'all',
+                            ),
                             const SizedBox(width: 8),
                             _buildFilterChip(
-                              'Pending (${reports.where((r) => r.isPending).length})',
+                              'Pending (${monthFilteredReports.where((r) => r.isPending).length})',
                               'pending',
-                              highlight: reports.any((r) => r.isPending),
+                              highlight:
+                                  monthFilteredReports.any((r) => r.isPending),
                             ),
                             const SizedBox(width: 8),
                             _buildFilterChip('Confirmed', 'confirmed'),
@@ -120,112 +200,193 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 ),
                 const Divider(color: AppColors.borderDefault, height: 1),
                 Expanded(
-                child: filteredReports.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.inbox_outlined,
-                              size: 44,
-                              color: AppColors.textMuted,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No reports found',
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(hPad, 18, hPad, 8),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildAnalyticsSection(
+                            analytics: analytics,
+                            selectedMonthDisplay: selectedMonthDisplay,
+                            getUser: getUser,
+                            isDesktop: isDesktop,
+                          ),
                         ),
-                      )
-                    : isDesktop
-                        ? ListView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 20,
-                            ),
-                            itemCount: (filteredReports.length / 2).ceil(),
-                            itemBuilder: (context, rowIndex) {
-                              final firstIndex = rowIndex * 2;
-                              final secondIndex = firstIndex + 1;
-                              final firstReport = filteredReports[firstIndex];
-                              final secondReport =
-                                  secondIndex < filteredReports.length
-                                      ? filteredReports[secondIndex]
-                                      : null;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16.0),
-                                child: IntrinsicHeight(
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Expanded(
-                                        child: _buildReportCard(
-                                          context: context,
-                                          report: firstReport,
-                                          accused: getUser(firstReport.accusedId),
-                                          reporter:
-                                              getUser(firstReport.reporterId),
-                                          keeper: keeper,
-                                          currentUser: currentUser,
-                                          isKeeperOrAdmin: isKeeperOrAdmin,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: secondReport != null
-                                            ? _buildReportCard(
-                                                context: context,
-                                                report: secondReport,
-                                                accused: getUser(
-                                                    secondReport.accusedId),
-                                                reporter: getUser(
-                                                    secondReport.reporterId),
-                                                keeper: keeper,
-                                                currentUser: currentUser,
-                                                isKeeperOrAdmin: isKeeperOrAdmin,
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
+                      ),
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 10),
+                        sliver: SliverToBoxAdapter(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'REPORT LOG (${filteredReports.length})',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                              if (_selectedMonthKey != 'all' ||
+                                  _selectedFilter != 'all')
+                                TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedMonthKey = 'all';
+                                      _selectedFilter = 'all';
+                                    });
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.filter_alt_off_outlined,
+                                    size: 14,
+                                    color: AppColors.accentPrimary,
+                                  ),
+                                  label: Text(
+                                    'Reset Filters',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.accentPrimary,
+                                    ),
                                   ),
                                 ),
-                              );
-                            },
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: filteredReports.length,
-                            itemBuilder: (context, index) {
-                              final report = filteredReports[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12.0),
-                                child: _buildReportCard(
-                                  context: context,
-                                  report: report,
-                                  accused: getUser(report.accusedId),
-                                  reporter: getUser(report.reporterId),
-                                  keeper: keeper,
-                                  currentUser: currentUser,
-                                  isKeeperOrAdmin: isKeeperOrAdmin,
-                                ),
-                              );
-                            },
+                            ],
                           ),
-              ),
-            ],
+                        ),
+                      ),
+                      if (filteredReports.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.inbox_outlined,
+                                    size: 44,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No reports found',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 16,
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (isDesktop)
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(hPad, 4, hPad, 24),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, rowIndex) {
+                                final firstIndex = rowIndex * 2;
+                                final secondIndex = firstIndex + 1;
+                                final firstReport = filteredReports[firstIndex];
+                                final secondReport =
+                                    secondIndex < filteredReports.length
+                                        ? filteredReports[secondIndex]
+                                        : null;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16.0),
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                          child: _buildReportCard(
+                                            context: context,
+                                            report: firstReport,
+                                            accused:
+                                                getUser(firstReport.accusedId),
+                                            reporter:
+                                                getUser(firstReport.reporterId),
+                                            keeper: keeper,
+                                            currentUser: currentUser,
+                                            isKeeperOrAdmin: isKeeperOrAdmin,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: secondReport != null
+                                              ? _buildReportCard(
+                                                  context: context,
+                                                  report: secondReport,
+                                                  accused: getUser(
+                                                      secondReport.accusedId),
+                                                  reporter: getUser(
+                                                      secondReport.reporterId),
+                                                  keeper: keeper,
+                                                  currentUser: currentUser,
+                                                  isKeeperOrAdmin:
+                                                      isKeeperOrAdmin,
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              childCount: (filteredReports.length / 2).ceil(),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(hPad, 4, hPad, 24),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final report = filteredReports[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: _buildReportCard(
+                                    context: context,
+                                    report: report,
+                                    accused: getUser(report.accusedId),
+                                    reporter: getUser(report.reporterId),
+                                    keeper: keeper,
+                                    currentUser: currentUser,
+                                    isKeeperOrAdmin: isKeeperOrAdmin,
+                                  ),
+                                );
+                              },
+                              childCount: filteredReports.length,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
+
 
   Widget _buildReportCard({
     required BuildContext context,
@@ -531,6 +692,483 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       ),
     );
   }
+
+  Widget _buildMonthChip(
+    String label,
+    String monthKeyVal, {
+    bool hasReports = false,
+  }) {
+    final isSelected = _selectedMonthKey == monthKeyVal;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      showCheckmark: false,
+      onSelected: (_) => setState(() => _selectedMonthKey = monthKeyVal),
+      selectedColor: AppColors.accentMint,
+      backgroundColor: AppColors.bgSurfaceElevated,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      labelStyle: GoogleFonts.inter(
+        color: isSelected
+            ? const Color(0xFF072116)
+            : (hasReports ? AppColors.textPrimary : AppColors.textMuted),
+        fontWeight: isSelected
+            ? FontWeight.w700
+            : (hasReports ? FontWeight.w600 : FontWeight.w500),
+        fontSize: 12,
+      ),
+      side: BorderSide(
+        color: isSelected
+            ? AppColors.accentMint
+            : (hasReports
+                ? AppColors.accentMint.withValues(alpha: 0.35)
+                : AppColors.borderDefault),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsSection({
+    required ReportAnalyticsSummary analytics,
+    required String selectedMonthDisplay,
+    required AppUser Function(String) getUser,
+    required bool isDesktop,
+  }) {
+    final peopleCard = _buildPeopleWhoSworeCard(analytics, getUser);
+    final wordsCard = _buildWordsSaidCard(analytics);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderDefault),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: AppColors.accentMint.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.insights_rounded,
+                  size: 16,
+                  color: AppColors.accentMint,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SWEAR ANALYTICS • ${selectedMonthDisplay.toUpperCase()}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: AppColors.accentGoldMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${analytics.totalSwears} swear(s) across ${analytics.totalReports} report(s) • ₱${analytics.totalPenaltyAmount.toStringAsFixed(0)} total',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () =>
+                    setState(() => _showAnalytics = !_showAnalytics),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: Icon(
+                  _showAnalytics
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: AppColors.accentPrimary,
+                ),
+                label: Text(
+                  _showAnalytics ? 'Hide' : 'Show',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accentPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_showAnalytics) ...[
+          const SizedBox(height: 12),
+          if (isDesktop)
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: peopleCard),
+                  const SizedBox(width: 16),
+                  Expanded(child: wordsCard),
+                ],
+              ),
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                peopleCard,
+                const SizedBox(height: 12),
+                wordsCard,
+              ],
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPeopleWhoSworeCard(
+    ReportAnalyticsSummary analytics,
+    AppUser Function(String) getUser,
+  ) {
+    return NeonCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.people_alt_outlined,
+                    size: 18,
+                    color: AppColors.accentPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'People Who Swore',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accentPrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${analytics.peopleStats.length} member(s)',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accentPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (analytics.peopleStats.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'No swears recorded for this period.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            )
+          else
+            for (int i = 0; i < analytics.peopleStats.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              Builder(
+                builder: (context) {
+                  final stat = analytics.peopleStats[i];
+                  final member = getUser(stat.userId);
+                  final pct = (stat.shareOfSwears * 100).round();
+                  final barColor = AppColors.avatarColorFor(
+                    member.displayName.isNotEmpty
+                        ? member.displayName
+                        : member.id,
+                  );
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          UserAvatar(user: member, size: 32),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  member.displayName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  '${stat.reportCount} report(s) • $pct% of swears',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.bgSurfaceElevated,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: AppColors.borderDefault,
+                                  ),
+                                ),
+                                child: Text(
+                                  '${stat.swearCount} swear${stat.swearCount == 1 ? '' : 's'}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.accentPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '₱${stat.totalAmount.toStringAsFixed(0)}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: stat.shareOfSwears,
+                          minHeight: 5,
+                          backgroundColor: AppColors.bgSurfaceElevated,
+                          valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWordsSaidCard(ReportAnalyticsSummary analytics) {
+    return NeonCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    size: 17,
+                    color: AppColors.accentMint,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Words Said',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accentMint.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${analytics.totalSwears} total',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accentMint,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (analytics.wordStats.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'No words recorded for this period.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            )
+          else
+            for (int i = 0; i < analytics.wordStats.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              Builder(
+                builder: (context) {
+                  final wStat = analytics.wordStats[i];
+                  final pct = (wStat.shareOfWords * 100).round();
+                  final barColor = wStat.isUnspecified
+                      ? AppColors.textMuted
+                      : AppColors.accentMint;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    wStat.isUnspecified
+                                        ? wStat.word
+                                        : '"${wStat.word}"',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      fontStyle: wStat.isUnspecified
+                                          ? FontStyle.italic
+                                          : FontStyle.normal,
+                                      fontWeight: wStat.isUnspecified
+                                          ? FontWeight.w500
+                                          : FontWeight.w600,
+                                      color: wStat.isUnspecified
+                                          ? AppColors.textSecondary
+                                          : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: barColor.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: barColor.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Text(
+                                  '×${wStat.count}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: wStat.isUnspecified
+                                        ? AppColors.textSecondary
+                                        : AppColors.accentMint,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 36,
+                                child: Text(
+                                  '$pct%',
+                                  textAlign: TextAlign.right,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: AppColors.textMuted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: wStat.shareOfWords,
+                          minHeight: 5,
+                          backgroundColor: AppColors.bgSurfaceElevated,
+                          valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+
 
   void _confirmApproveDialog(
     BuildContext context,

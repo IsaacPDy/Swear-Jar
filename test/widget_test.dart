@@ -56,7 +56,9 @@ void main() {
 
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
-    expect(find.text('TOTAL GROUP OUTSTANDING'), findsOneWidget);
+    expect(find.text('TO BE RECEIVED'), findsOneWidget);
+    expect(find.text('COLLECTED ALREADY'), findsOneWidget);
+    expect(find.text('PAYMENT HISTORY'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -127,7 +129,8 @@ void main() {
 
     await tester.tap(find.text('Jar'));
     await tester.pumpAndSettle();
-    expect(find.text('TOTAL GROUP OUTSTANDING'), findsOneWidget);
+    expect(find.text('TO BE RECEIVED'), findsOneWidget);
+    expect(find.text('COLLECTED ALREADY'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -345,7 +348,151 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+      'Keeper can record a partial payment in Group Jar & Ledger and see To Be Received and Collected Already update',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final container = ProviderContainer(
+      overrides: [
+        isLiveModeProvider.overrideWith((ref) => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // Sign in as Leo (Keeper & Admin)
+    await container.read(authRepositoryProvider).signInWithDemo('user_leo');
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SwearJarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Navigate to Jar tab
+    await tester.tap(find.text('Jar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Group Jar & Ledger'), findsOneWidget);
+    expect(find.text('AMOUNT EACH PERSON SHOULD PAY (TO BE RECEIVED)'), findsOneWidget);
+    expect(find.text('PAYMENT HISTORY'), findsOneWidget);
+
+    // Every approved member (Fiona, Sam, Leo) is shown in the person boxes with their To Be Received
+    expect(find.text('Fiona'), findsWidgets);
+    expect(find.text('Sam'), findsWidgets);
+    expect(find.text('Leo'), findsWidgets);
+
+    // Initially: Sam owes 50 (with 50 already collected), Fiona owes 50 (0 collected)
+    // Total To Be Received = 100, Total Collected Already = 50 -> ₱50 / ₱150 (33%)
+    expect(find.text('₱50 / ₱150 (33%)'), findsOneWidget);
+    expect(find.text('+₱50'), findsOneWidget);
+
+    // Tap Record Payment (Full or Partial) button in summary card
+    await tester.tap(find.text('Record Payment (Full or Partial)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Full Payment'), findsOneWidget);
+    expect(find.text('Partial Payment'), findsWidgets);
+
+    // Switch to Partial Payment and enter 20
+    await tester.tap(find.widgetWithText(InkWell, 'Partial Payment'));
+    await tester.pumpAndSettle();
+
+    final amountField = find.widgetWithText(
+      TextField,
+      'Partial Payment Amount (₱)',
+    );
+    await tester.enterText(amountField, '20');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remaining To Be Received'), findsOneWidget);
+    expect(find.text('Record Partial Payment (₱20)'), findsOneWidget);
+
+    await tester.tap(find.text('Record Partial Payment (₱20)'));
+    await tester.pumpAndSettle();
+
+    // Now Total Collected Already increased from 50 to 70, To Be Received decreased from 100 to 80,
+    // and +₱20 is recorded in PAYMENT HISTORY!
+    expect(find.text('₱70 / ₱150 (47%)'), findsOneWidget);
+    expect(find.text('Total Collected: ₱70'), findsOneWidget);
+    expect(find.text('+₱20'), findsOneWidget);
+  });
+
+  testWidgets(
+      'ReportsScreen displays Month filter chips and Analytics of People Who Swore and Words Said',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final container = ProviderContainer(
+      overrides: [
+        isLiveModeProvider.overrideWith((ref) => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // Submit a historical report in an earlier month to test month filtering
+    await container.read(reportRepositoryProvider).submitReport(
+          reporterId: 'user_fiona',
+          accusedId: 'user_leo',
+          count: 3,
+          swearBreakdown: const {'Gago': 3},
+          rateApplied: 50.0,
+          swearDate: DateTime(2025, 12, 15),
+        );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SwearJarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Navigate to Reports tab
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report History & Review'), findsOneWidget);
+    expect(find.text('All Months'), findsOneWidget);
+    expect(find.text('Dec 2025 (1)'), findsOneWidget);
+    expect(find.text('People Who Swore'), findsOneWidget);
+    expect(find.text('Words Said'), findsOneWidget);
+    expect(find.text('"Fuck"'), findsOneWidget);
+    expect(find.text('"Gago"'), findsOneWidget);
+
+    // Filter by Dec 2025
+    await tester.ensureVisible(find.text('Dec 2025 (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dec 2025 (1)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SWEAR ANALYTICS • DECEMBER 2025'), findsOneWidget);
+    expect(find.text('REPORT LOG (1)'), findsOneWidget);
+    expect(find.text('"Gago"'), findsOneWidget);
+    expect(find.text('"Fuck"'), findsNothing);
+
+    // Reset back to All Months
+    await tester.tap(find.text('Reset Filters'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SWEAR ANALYTICS • ALL MONTHS'), findsOneWidget);
+    expect(find.text('REPORT LOG (4)'), findsOneWidget);
+  });
 }
+
 
 
 

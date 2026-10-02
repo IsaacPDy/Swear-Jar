@@ -257,6 +257,215 @@ class LedgerEngine {
     );
   }
 
+  /// Record a payment (partial or full) towards a member's active debts (oldest first, FIFO).
+  /// Returns the list of modified DebtObligations.
+  static List<DebtObligation> recordMemberPayment({
+    required List<DebtObligation> activeDebts,
+    required double amount,
+    required String recordedBy,
+    String? note,
+    DateTime? now,
+  }) {
+    if (amount <= 0) {
+      throw ArgumentError('Payment amount must be greater than zero');
+    }
+
+    final timestamp = now ?? DateTime.now();
+    final sorted = activeDebts
+        .where((d) => d.isActive && d.remainingBalance > 0.001)
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    double remainingToApply = amount;
+    final updatedDebts = <DebtObligation>[];
+
+    for (final debt in sorted) {
+      if (remainingToApply <= 0.001) break;
+      final paymentForDebt = remainingToApply > debt.remainingBalance
+          ? debt.remainingBalance
+          : remainingToApply;
+      if (paymentForDebt <= 0.001) continue;
+
+      final updated = recordPayment(
+        debt: debt,
+        amount: paymentForDebt,
+        recordedBy: recordedBy,
+        note: note,
+        now: timestamp,
+      );
+      updatedDebts.add(updated);
+      remainingToApply -= paymentForDebt;
+    }
+
+    return updatedDebts;
+  }
+
+  /// Dismiss all active transferred debts in a member summary group.
+  static List<DebtObligation> dismissMemberTransferredDebts({
+    required List<DebtObligation> activeDebts,
+    required String dismissedBy,
+    String? reason,
+    DateTime? now,
+  }) {
+    final timestamp = now ?? DateTime.now();
+    return activeDebts
+        .where((d) => d.isActive && d.remainingBalance > 0.001)
+        .map((debt) => dismissTransferredDebt(
+              debt: debt,
+              dismissedBy: dismissedBy,
+              reason: reason,
+              now: timestamp,
+            ))
+        .toList();
+  }
+
+  /// Aggregate debts into per-person ledger summaries so the UI shows total per person
+  /// ("To Be Received" and "Collected Already") rather than individual report transactions.
+  static List<MemberLedgerSummary> buildMemberLedgerSummaries({
+    required List<DebtObligation> allDebts,
+    String defaultRecipientId = '',
+    bool groupByRecipientAndTransfer = false,
+  }) {
+    final grouped = <String, List<DebtObligation>>{};
+    for (final debt in allDebts) {
+      final key = groupByRecipientAndTransfer
+          ? '${debt.debtorId}|${debt.recipientId}|${debt.isTransferred}'
+          : debt.debtorId;
+      grouped.putIfAbsent(key, () => []).add(debt);
+    }
+
+    final summaries = <MemberLedgerSummary>[];
+    for (final entry in grouped.entries) {
+      final debts = entry.value;
+      if (debts.isEmpty) continue;
+
+      double toBeReceived = 0.0;
+      double collectedAlready = 0.0;
+      DateTime? lastActivity;
+
+      for (final d in debts) {
+        if (d.isActive) {
+          toBeReceived += d.remainingBalance;
+        }
+        collectedAlready += d.collectedAmount;
+
+        DateTime candidate = d.resolvedAt ?? d.createdAt;
+        for (final p in d.payments) {
+          if (p.recordedAt.isAfter(candidate)) {
+            candidate = p.recordedAt;
+          }
+        }
+        if (lastActivity == null || candidate.isAfter(lastActivity)) {
+          lastActivity = candidate;
+        }
+      }
+
+      if (toBeReceived <= 0.001 && collectedAlready <= 0.001) {
+        continue;
+      }
+
+      final activeRecipient = debts
+              .where((d) => d.isActive)
+              .map((d) => d.recipientId)
+              .firstOrNull ??
+          (defaultRecipientId.isNotEmpty
+              ? defaultRecipientId
+              : debts.first.recipientId);
+
+      summaries.add(
+        MemberLedgerSummary(
+          debtorId: debts.first.debtorId,
+          recipientId: groupByRecipientAndTransfer
+              ? debts.first.recipientId
+              : activeRecipient,
+          isTransferred: groupByRecipientAndTransfer
+              ? debts.first.isTransferred
+              : debts.any((d) => d.isActive && d.isTransferred),
+          totalIncurred: collectedAlready + toBeReceived,
+          collectedAlready: collectedAlready,
+          toBeReceived: toBeReceived,
+          debts: debts,
+          lastActivityAt: lastActivity,
+        ),
+      );
+    }
+
+    summaries.sort((a, b) {
+      final activeCmp = b.toBeReceived.compareTo(a.toBeReceived);
+      if (activeCmp.abs() > 0.001) return activeCmp;
+      final collectedCmp = b.collectedAlready.compareTo(a.collectedAlready);
+      if (collectedCmp.abs() > 0.001) return collectedCmp;
+      return (b.lastActivityAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .compareTo(
+              a.lastActivityAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+    });
+
+    return summaries;
+  }
+
+  /// Extract chronological payment history entries across all debts (newest first),
+  /// merging split FIFO records created at the same timestamp into a single payment entry.
+  static List<PaymentHistoryItem> buildPaymentHistory({
+    required List<DebtObligation> allDebts,
+  }) {
+    final groupedByAction = <String, PaymentHistoryItem>{};
+
+    for (final debt in allDebts) {
+      final realPayments = debt.payments
+          .where((p) => p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET')
+          .toList();
+      if (realPayments.isEmpty) continue;
+
+      final effectivePayments = debt.isDismissed && realPayments.isNotEmpty
+          ? realPayments.sublist(0, realPayments.length - 1)
+          : realPayments;
+
+      double runningPaid = 0.0;
+      for (final p in effectivePayments) {
+        if (p.amount <= 0.001) continue;
+        runningPaid += p.amount;
+        final isPartialForThisDebt =
+            runningPaid < debt.originalAmount - 0.001 ||
+                p.amount < debt.originalAmount - 0.001;
+
+        final actionSecond = p.recordedAt.millisecondsSinceEpoch ~/ 1000;
+        final groupKey =
+            '${debt.debtorId}|${debt.recipientId}|${p.recordedBy}|${p.note ?? ""}|$actionSecond';
+
+        final existing = groupedByAction[groupKey];
+        if (existing == null) {
+          groupedByAction[groupKey] = PaymentHistoryItem(
+            id: p.id,
+            debtorId: debt.debtorId,
+            recipientId: debt.recipientId,
+            amount: p.amount,
+            recordedBy: p.recordedBy,
+            recordedAt: p.recordedAt,
+            note: p.note,
+            isPartial: isPartialForThisDebt,
+          );
+        } else {
+          groupedByAction[groupKey] = PaymentHistoryItem(
+            id: existing.id,
+            debtorId: existing.debtorId,
+            recipientId: existing.recipientId,
+            amount: existing.amount + p.amount,
+            recordedBy: existing.recordedBy,
+            recordedAt: p.recordedAt.isAfter(existing.recordedAt)
+                ? p.recordedAt
+                : existing.recordedAt,
+            note: existing.note,
+            isPartial: isPartialForThisDebt && debt.remainingBalance > 0.001,
+          );
+        }
+      }
+    }
+
+    final items = groupedByAction.values.toList()
+      ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+    return items;
+  }
+
   /// Appoint a new Keeper and transfer active standard debts to the new Keeper.
   /// Note: Transferred debts remain with their original reporters.
   static List<DebtObligation> migrateDebtsToNewKeeper({
@@ -403,4 +612,153 @@ class LedgerEngine {
       swearCountDelta: -confirmedSwearsRemoved,
     );
   }
+
+  /// Format a DateTime into a canonical 'YYYY-MM' month filter key.
+  static String monthKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+  }
+
+  /// Extract all selectable months (all months of the current year up to `now`,
+  /// plus any additional months present in `reports`), sorted newest first.
+  static List<DateTime> extractReportMonths(
+    List<SwearReport> reports, {
+    DateTime? now,
+  }) {
+    final current = now ?? DateTime.now();
+    final monthSet = <String, DateTime>{};
+
+    // Include all months of the current year up to the current month
+    for (int m = 1; m <= current.month; m++) {
+      final dt = DateTime(current.year, m);
+      monthSet[monthKey(dt)] = dt;
+    }
+
+    // Also include any month that has at least one report
+    for (final r in reports) {
+      final dt = DateTime(r.swearDate.year, r.swearDate.month);
+      monthSet[monthKey(dt)] = dt;
+    }
+
+    final months = monthSet.values.toList()
+      ..sort((a, b) => b.compareTo(a));
+    return months;
+  }
+
+  /// Compute analytics for "People Who Swore" and "Words Said" from a list of reports.
+  /// By default, rejected reports are excluded so invalid/rejected reports do not skew counts,
+  /// unless `includeRejected` is true (e.g. when specifically inspecting the Rejected filter).
+  static ReportAnalyticsSummary computeReportAnalytics(
+    List<SwearReport> reports, {
+    bool includeRejected = false,
+  }) {
+    final eligible = includeRejected
+        ? reports
+        : reports.where((r) => !r.isRejected).toList();
+
+    if (eligible.isEmpty) {
+      return const ReportAnalyticsSummary(
+        totalSwears: 0,
+        totalReports: 0,
+        totalPenaltyAmount: 0.0,
+      );
+    }
+
+    int totalSwears = 0;
+    double totalPenaltyAmount = 0.0;
+
+    final personSwears = <String, int>{};
+    final personReports = <String, int>{};
+    final personAmount = <String, double>{};
+
+    final wordCounts = <String, int>{};
+    final wordDisplayLabels = <String, String>{};
+    int unspecifiedWordCount = 0;
+
+    for (final report in eligible) {
+      totalSwears += report.count;
+      totalPenaltyAmount += report.totalAmount;
+
+      final uid = report.accusedId;
+      personSwears[uid] = (personSwears[uid] ?? 0) + report.count;
+      personReports[uid] = (personReports[uid] ?? 0) + 1;
+      personAmount[uid] = (personAmount[uid] ?? 0.0) + report.totalAmount;
+
+      int breakdownSum = 0;
+      for (final entry in report.swearBreakdown.entries) {
+        final rawWord = entry.key.trim();
+        final c = entry.value;
+        if (rawWord.isEmpty || c <= 0) continue;
+        breakdownSum += c;
+        final normalized = rawWord.toLowerCase();
+        wordDisplayLabels.putIfAbsent(normalized, () => rawWord);
+        wordCounts[normalized] = (wordCounts[normalized] ?? 0) + c;
+      }
+
+      if (report.count > breakdownSum) {
+        unspecifiedWordCount += (report.count - breakdownSum);
+      }
+    }
+
+    final peopleStats = personSwears.entries.map((e) {
+      final uid = e.key;
+      final swears = e.value;
+      return SwearPersonStat(
+        userId: uid,
+        swearCount: swears,
+        reportCount: personReports[uid] ?? 0,
+        totalAmount: personAmount[uid] ?? 0.0,
+        shareOfSwears: totalSwears > 0 ? (swears / totalSwears).clamp(0.0, 1.0) : 0.0,
+      );
+    }).toList()
+      ..sort((a, b) {
+        final cmp = b.swearCount.compareTo(a.swearCount);
+        if (cmp != 0) return cmp;
+        final amtCmp = b.totalAmount.compareTo(a.totalAmount);
+        if (amtCmp != 0) return amtCmp;
+        return a.userId.compareTo(b.userId);
+      });
+
+    final totalWordDenominator = wordCounts.values.fold<int>(0, (s, c) => s + c) +
+        unspecifiedWordCount;
+
+    final wordStats = wordCounts.entries.map((e) {
+      final label = wordDisplayLabels[e.key] ?? e.key;
+      final c = e.value;
+      return SwearWordStat(
+        word: label,
+        count: c,
+        shareOfWords: totalWordDenominator > 0
+            ? (c / totalWordDenominator).clamp(0.0, 1.0)
+            : 0.0,
+        isUnspecified: false,
+      );
+    }).toList()
+      ..sort((a, b) {
+        final cmp = b.count.compareTo(a.count);
+        if (cmp != 0) return cmp;
+        return a.word.toLowerCase().compareTo(b.word.toLowerCase());
+      });
+
+    if (unspecifiedWordCount > 0) {
+      wordStats.add(
+        SwearWordStat(
+          word: 'Unspecified / Other',
+          count: unspecifiedWordCount,
+          shareOfWords: totalWordDenominator > 0
+              ? (unspecifiedWordCount / totalWordDenominator).clamp(0.0, 1.0)
+              : 0.0,
+          isUnspecified: true,
+        ),
+      );
+    }
+
+    return ReportAnalyticsSummary(
+      totalSwears: totalSwears,
+      totalReports: eligible.length,
+      totalPenaltyAmount: totalPenaltyAmount,
+      peopleStats: peopleStats,
+      wordStats: wordStats,
+    );
+  }
 }
+

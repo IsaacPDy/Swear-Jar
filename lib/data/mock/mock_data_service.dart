@@ -124,6 +124,7 @@ class MockDataService
       accusedId: sam.id,
       count: 2,
       note: 'During game night rage',
+      swearBreakdown: const {'Fuck': 1, 'Shit': 1},
       rateApplied: 50.0,
       totalAmount: 100.0,
       status: ReportStatus.confirmed,
@@ -159,6 +160,7 @@ class MockDataService
       accusedId: fiona.id,
       count: 1,
       note: 'Dropped coffee',
+      swearBreakdown: const {'Damn': 1},
       rateApplied: 50.0,
       totalAmount: 50.0,
       status: ReportStatus.confirmed,
@@ -184,6 +186,7 @@ class MockDataService
       accusedId: sam.id,
       count: 1,
       note: 'Traffic incident shout',
+      swearBreakdown: const {'Putangina': 1},
       rateApplied: 50.0,
       totalAmount: 50.0,
       status: ReportStatus.pending,
@@ -461,6 +464,33 @@ class MockDataService
   }
 
   @override
+  Future<List<DebtObligation>> recordMemberPayment({
+    required List<DebtObligation> activeDebts,
+    required double amount,
+    required String recordedBy,
+    String? note,
+  }) async {
+    final updatedDebts = LedgerEngine.recordMemberPayment(
+      activeDebts: activeDebts,
+      amount: amount,
+      recordedBy: recordedBy,
+      note: note,
+      now: DateTime.now(),
+    );
+
+    for (final updated in updatedDebts) {
+      final idx = _debts.indexWhere((d) => d.id == updated.id);
+      if (idx != -1) {
+        _debts[idx] = updated;
+      }
+    }
+    if (updatedDebts.isNotEmpty) {
+      _debtsController.add(List.unmodifiable(_debts));
+    }
+    return updatedDebts;
+  }
+
+  @override
   Future<DebtObligation> dismissTransferredDebt({
     required DebtObligation debt,
     required String dismissedBy,
@@ -479,6 +509,31 @@ class MockDataService
       _debtsController.add(List.unmodifiable(_debts));
     }
     return dismissed;
+  }
+
+  @override
+  Future<List<DebtObligation>> dismissMemberTransferredDebts({
+    required List<DebtObligation> activeDebts,
+    required String dismissedBy,
+    String? reason,
+  }) async {
+    final dismissedDebts = LedgerEngine.dismissMemberTransferredDebts(
+      activeDebts: activeDebts,
+      dismissedBy: dismissedBy,
+      reason: reason,
+      now: DateTime.now(),
+    );
+
+    for (final dismissed in dismissedDebts) {
+      final idx = _debts.indexWhere((d) => d.id == dismissed.id);
+      if (idx != -1) {
+        _debts[idx] = dismissed;
+      }
+    }
+    if (dismissedDebts.isNotEmpty) {
+      _debtsController.add(List.unmodifiable(_debts));
+    }
+    return dismissedDebts;
   }
 
   @override

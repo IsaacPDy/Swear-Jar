@@ -91,8 +91,9 @@ class MockDataService
     _config = SystemConfig(
       activeKeeperId: leo.id,
       currentRatePerSwear: 50.0,
+      currentCompensationPerSwear: 10.0,
       groupName: 'The Swear Jar Crew',
-      totalSwearsAllTime: 12,
+      totalSwearsAllTime: 3,
       swearLanguages: const [
         SwearLanguage(
           id: 'english',
@@ -188,6 +189,7 @@ class MockDataService
       note: 'Traffic incident shout',
       swearBreakdown: const {'Putangina': 1},
       rateApplied: 50.0,
+      compensationApplied: 10.0,
       totalAmount: 50.0,
       status: ReportStatus.pending,
       createdAt: now.subtract(const Duration(minutes: 30)),
@@ -225,11 +227,21 @@ class MockDataService
 
   @override
   Future<void> signInWithDemo(String userId) async {
-    final found = _users.firstWhere(
-      (u) => u.id == userId,
-      orElse: () => _users.first,
-    );
-    _currentUser = found;
+    final idx = _users.indexWhere((u) => u.id == userId);
+    if (idx != -1) {
+      var found = _users[idx];
+      if (found.isRejected) {
+        found = found.copyWith(
+          status: UserStatus.pending,
+          updatedAt: DateTime.now(),
+        );
+        _users[idx] = found;
+        _usersController.add(List.unmodifiable(_users));
+      }
+      _currentUser = found;
+    } else {
+      _currentUser = _users.first;
+    }
     _authController.add(_currentUser);
   }
 
@@ -270,6 +282,7 @@ class MockDataService
     String? note,
     Map<String, int>? swearBreakdown,
     required double rateApplied,
+    double compensationApplied = 0.0,
     DateTime? swearDate,
   }) async {
     final now = DateTime.now();
@@ -281,6 +294,7 @@ class MockDataService
       note: note,
       swearBreakdown: swearBreakdown ?? const {},
       rateApplied: rateApplied,
+      compensationApplied: compensationApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
       swearDate: swearDate ?? now,
@@ -314,6 +328,9 @@ class MockDataService
     }
 
     _debts.insert(0, result.createdDebt);
+    if (result.createdCompensationDebt != null) {
+      _debts.insert(0, result.createdCompensationDebt!);
+    }
 
     for (final updated in result.updatedDebts) {
       final idx = _debts.indexWhere((d) => d.id == updated.id);
@@ -618,8 +635,8 @@ class MockDataService
       );
       _users[idx] = updated;
       if (_currentUser?.id == userId) {
-        _currentUser = updated;
-        _authController.add(_currentUser);
+        _currentUser = null;
+        _authController.add(null);
       }
       _usersController.add(List.unmodifiable(_users));
     }
@@ -814,6 +831,15 @@ class MockDataService
   Future<void> updateRate(double newRate) async {
     _config = _config.copyWith(
       currentRatePerSwear: newRate,
+      updatedAt: DateTime.now(),
+    );
+    _configController.add(_config);
+  }
+
+  @override
+  Future<void> updateCompensationRate(double newCompensationRate) async {
+    _config = _config.copyWith(
+      currentCompensationPerSwear: newCompensationRate,
       updatedAt: DateTime.now(),
     );
     _configController.add(_config);

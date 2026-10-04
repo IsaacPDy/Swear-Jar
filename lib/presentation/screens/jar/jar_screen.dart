@@ -18,7 +18,7 @@ class JarScreen extends ConsumerWidget {
     final groupTotalToBeReceived = ref.watch(groupTotalActiveDebtProvider);
     final activeMemberBalances = ref.watch(activeMemberBalancesProvider);
     final paymentHistory = ref.watch(paymentHistoryProvider);
-    final config = ref.watch(systemConfigProvider).valueOrNull;
+    final allTimeSwears = ref.watch(allTimeSwearsCountProvider);
     final users = ref.watch(usersListProvider).valueOrNull ?? [];
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final keeper = ref.watch(activeKeeperProvider);
@@ -157,7 +157,7 @@ class JarScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${config?.totalSwearsAllTime ?? 0}',
+                        '$allTimeSwears',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -208,7 +208,7 @@ class JarScreen extends ConsumerWidget {
       ),
     );
 
-    final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+    final allDebts = ref.watch(validDebtsProvider);
     final paymentHistorySection = _buildPaymentHistorySection(
       context: context,
       ref: ref,
@@ -233,7 +233,7 @@ class JarScreen extends ConsumerWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'TRANSFERRED BALANCES (KEEPER BOUNTIES)',
+                  'MEMBER RECEIVABLES & BOUNTIES',
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
                     fontSize: 11.5,

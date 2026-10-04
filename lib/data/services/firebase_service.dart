@@ -28,6 +28,7 @@ class FirebaseDataService
   StreamSubscription? _userDocSubscription;
   bool _hasResolvedUserForCurrentAuth = false;
   bool _isBootstrapping = false;
+  bool _isReconciling = false;
   final StreamController<AppUser?> _userStreamController =
       StreamController<AppUser?>.broadcast();
 
@@ -69,6 +70,14 @@ class FirebaseDataService
               return 0;
             });
             final user = matchingUsers.first;
+            if (user.isRejected) {
+              _hasResolvedUserForCurrentAuth = true;
+              await _firestore.collection('users').doc(user.id).update({
+                'status': UserStatus.pending.toStr(),
+                'updatedAt': DateTime.now().toIso8601String(),
+              });
+              return;
+            }
             _hasResolvedUserForCurrentAuth = true;
             _cachedCurrentUser = user;
             _userStreamController.add(user);
@@ -310,10 +319,7 @@ class FirebaseDataService
 
   @override
   Future<void> rejectUser(String userId) async {
-    await _firestore.collection('users').doc(userId).update({
-      'status': UserStatus.rejected.toStr(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    });
+    await _firestore.collection('users').doc(userId).delete();
   }
 
   @override
@@ -546,6 +552,7 @@ class FirebaseDataService
     String? note,
     Map<String, int>? swearBreakdown,
     required double rateApplied,
+    double compensationApplied = 0.0,
     DateTime? swearDate,
   }) async {
     final id = _uuid.v4();
@@ -558,6 +565,7 @@ class FirebaseDataService
       note: note,
       swearBreakdown: swearBreakdown ?? const {},
       rateApplied: rateApplied,
+      compensationApplied: compensationApplied,
       totalAmount: count * rateApplied,
       status: ReportStatus.pending,
       swearDate: swearDate ?? now,
@@ -596,6 +604,14 @@ class FirebaseDataService
       result.createdDebt.toMap(),
     );
 
+    // 2b. Optional reporter compensation receivable debt
+    if (result.createdCompensationDebt != null) {
+      batch.set(
+        _firestore.collection('debts').doc(result.createdCompensationDebt!.id),
+        result.createdCompensationDebt!.toMap(),
+      );
+    }
+
     // 3. Transferred debts
     for (final debt in result.transferredDebts) {
       batch.set(
@@ -604,7 +620,7 @@ class FirebaseDataService
       );
     }
 
-    // 4. Cancelled debts
+    // 4. Cancelled / deducted reporter debts
     for (final debt in result.cancelledReporterDebts) {
       batch.set(
         _firestore.collection('debts').doc(debt.id),
@@ -705,11 +721,21 @@ class FirebaseDataService
       existingDebts: existingDebts,
     );
 
+    final linkedDebtsSnapshot = await _firestore
+        .collection('debts')
+        .where('reportId', isEqualTo: report.id)
+        .get();
+
+    final debtIdsToDelete = <String>{
+      ...result.deletedDebtIds,
+      ...linkedDebtsSnapshot.docs.map((doc) => doc.id),
+    };
+
     final batch = _firestore.batch();
 
     batch.delete(_firestore.collection('reports').doc(result.deletedReportId));
 
-    for (final debtId in result.deletedDebtIds) {
+    for (final debtId in debtIdsToDelete) {
       batch.delete(_firestore.collection('debts').doc(debtId));
     }
 
@@ -725,7 +751,62 @@ class FirebaseDataService
     }
 
     await batch.commit();
-    return result;
+    return ReportDeletionResult(
+      deletedReportId: result.deletedReportId,
+      deletedDebtIds: debtIdsToDelete.toList(),
+      swearCountDelta: result.swearCountDelta,
+    );
+  }
+
+  /// Automatically purge any orphaned debt obligations whose linked report no longer exists
+  /// (or is not confirmed) and synchronize `totalSwearsAllTime` with confirmed reports.
+  Future<void> reconcileLedgerWithReports({
+    required List<SwearReport> reports,
+    required List<DebtObligation> debts,
+    SystemConfig? config,
+  }) async {
+    if (Firebase.apps.isEmpty || _isReconciling) return;
+
+    final confirmedReportIds = reports
+        .where((r) => r.isConfirmed)
+        .map((r) => r.id)
+        .toSet();
+
+    final orphanedDebts = debts
+        .where((d) => !confirmedReportIds.contains(d.reportId))
+        .toList();
+
+    final actualTotalSwears = reports
+        .where((r) => r.isConfirmed)
+        .fold<int>(0, (total, r) => total + r.count);
+
+    final needsSwearCountSync =
+        config != null && config.totalSwearsAllTime != actualTotalSwears;
+
+    if (orphanedDebts.isEmpty && !needsSwearCountSync) return;
+
+    _isReconciling = true;
+    try {
+      final batch = _firestore.batch();
+      for (final orphan in orphanedDebts) {
+        batch.delete(_firestore.collection('debts').doc(orphan.id));
+      }
+      if (needsSwearCountSync) {
+        batch.set(
+          _firestore.collection('config').doc('system'),
+          {
+            'totalSwearsAllTime': actualTotalSwears,
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error reconciling ledger with reports: $e');
+    } finally {
+      _isReconciling = false;
+    }
   }
 
   // -------------------------------------------------------------
@@ -935,6 +1016,14 @@ class FirebaseDataService
   Future<void> updateRate(double newRate) async {
     await _firestore.collection('config').doc('system').set({
       'currentRatePerSwear': newRate,
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> updateCompensationRate(double newCompensationRate) async {
+    await _firestore.collection('config').doc('system').set({
+      'currentCompensationPerSwear': newCompensationRate,
       'updatedAt': DateTime.now().toIso8601String(),
     }, SetOptions(merge: true));
   }

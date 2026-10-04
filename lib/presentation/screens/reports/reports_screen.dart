@@ -24,6 +24,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final reports = ref.watch(reportsListProvider).valueOrNull ?? [];
+    ref.watch(debtsListProvider);
     final users = ref.watch(usersListProvider).valueOrNull ?? [];
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final keeper = ref.watch(activeKeeperProvider);
@@ -596,6 +597,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       Expanded(
                         child: Text(
                           'Keeper Swear Rule: Confirming will transfer Keeper\'s unpaid debts to ${reporter.displayName} and forgive reporter debt.',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (!isKeeperAccused &&
+                  report.reporterId != report.accusedId &&
+                  report.totalCompensation > 0 &&
+                  !report.isRejected) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSuccess.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.accentSuccess.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.card_giftcard_rounded,
+                        size: 16,
+                        color: AppColors.accentSuccess,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reporter Compensation (${reporter.displayName}): ₱${report.totalCompensation.toStringAsFixed(0)} (₱${report.compensationApplied.toStringAsFixed(0)} × ${report.count})',
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w500,
@@ -1215,6 +1251,28 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ),
                   child: Text(
                     'Keeper Swear Invariant:\n• Active Keeper debts transfer to ${reporter.displayName}.\n• ${reporter.displayName}\'s existing debt to Keeper is forgiven.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ] else if (report.reporterId != report.accusedId &&
+                  report.totalCompensation > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSuccess.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.accentSuccess.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    'Reporter Compensation:\n• ${reporter.displayName} receives ₱${report.totalCompensation.toStringAsFixed(0)} (₱${report.compensationApplied.toStringAsFixed(0)} × ${report.count}).\n• Deducted from ${reporter.displayName}\'s existing payable first, or owed to them as a receivable.',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       color: AppColors.textPrimary,

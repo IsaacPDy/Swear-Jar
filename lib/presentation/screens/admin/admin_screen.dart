@@ -15,6 +15,7 @@ class AdminScreen extends ConsumerStatefulWidget {
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   final _rateController = TextEditingController();
+  final _compensationController = TextEditingController();
   final _languageController = TextEditingController();
   final _initialSwearsController = TextEditingController();
   final Map<String, TextEditingController> _swearControllers = {};
@@ -25,12 +26,15 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     final config = ref.read(systemConfigProvider).valueOrNull;
     if (config != null) {
       _rateController.text = config.currentRatePerSwear.toStringAsFixed(0);
+      _compensationController.text =
+          config.currentCompensationPerSwear.toStringAsFixed(0);
     }
   }
 
   @override
   void dispose() {
     _rateController.dispose();
+    _compensationController.dispose();
     _languageController.dispose();
     _initialSwearsController.dispose();
     for (final c in _swearControllers.values) {
@@ -247,9 +251,19 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                         NeonButton(
                           label: 'Reject',
                           type: NeonButtonType.danger,
-                          onPressed: () => ref
-                              .read(userRepositoryProvider)
-                              .rejectUser(user.id),
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            await ref
+                                .read(userRepositoryProvider)
+                                .rejectUser(user.id);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Dismissed sign-in request from ${user.displayName}. They can sign in again to request access.'),
+                                backgroundColor: AppColors.accentWarning,
+                              ),
+                            );
+                          },
                         ),
                         if (approvedUsers.isNotEmpty)
                           NeonButton(
@@ -396,6 +410,16 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       ],
     );
 
+    if (config != null) {
+      if (_rateController.text.isEmpty) {
+        _rateController.text = config.currentRatePerSwear.toStringAsFixed(0);
+      }
+      if (_compensationController.text.isEmpty) {
+        _compensationController.text =
+            config.currentCompensationPerSwear.toStringAsFixed(0);
+      }
+    }
+
     final rateSection = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -470,6 +494,130 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                         SnackBar(
                           content: Text(
                               'Penalty rate updated to ₱${rate.toStringAsFixed(0)}!'),
+                          backgroundColor: AppColors.accentSuccess,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            const Icon(Icons.card_giftcard_rounded,
+                color: AppColors.accentSuccess, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'REPORTER COMPENSATION',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        NeonCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Current Compensation',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    '₱${(config?.currentCompensationPerSwear ?? 0).toStringAsFixed(0)} / swear',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.accentSuccess,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Amount members receive per swear when reporting another member. If the reporter has an existing payable, it is deducted from there first; any remainder becomes a receivable owed to them.',
+                style: GoogleFonts.inter(
+                    fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _compensationController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Compensation Per Swear (₱)',
+                        labelStyle:
+                            GoogleFonts.inter(color: AppColors.textSecondary),
+                        filled: true,
+                        fillColor: AppColors.bgSurfaceElevated,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: AppColors.borderDefault),
+                        ),
+                      ),
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  NeonButton(
+                    label: 'Update Compensation',
+                    type: NeonButtonType.mint,
+                    onPressed: () async {
+                      final comp = double.tryParse(
+                          _compensationController.text.trim());
+                      final messenger = ScaffoldMessenger.of(context);
+                      if (comp == null || comp < 0) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Please enter a valid compensation amount (₱0 or higher).'),
+                            backgroundColor: AppColors.accentError,
+                          ),
+                        );
+                        return;
+                      }
+                      final currentRate = config?.currentRatePerSwear ?? 50.0;
+                      if (comp > currentRate) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Compensation cannot exceed the penalty rate (₱${currentRate.toStringAsFixed(0)}).'),
+                            backgroundColor: AppColors.accentWarning,
+                          ),
+                        );
+                        return;
+                      }
+                      await ref
+                          .read(configRepositoryProvider)
+                          .updateCompensationRate(comp);
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Reporter compensation updated to ₱${comp.toStringAsFixed(0)} per swear!'),
                           backgroundColor: AppColors.accentSuccess,
                         ),
                       );

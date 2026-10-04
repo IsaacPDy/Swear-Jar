@@ -192,6 +192,7 @@ class SwearReport {
   final String? note;
   final Map<String, int> swearBreakdown;
   final double rateApplied;
+  final double compensationApplied;
   final double totalAmount;
   final ReportStatus status;
   final String? reviewedBy;
@@ -208,6 +209,7 @@ class SwearReport {
     this.note,
     this.swearBreakdown = const {},
     required this.rateApplied,
+    this.compensationApplied = 0.0,
     required this.totalAmount,
     required this.status,
     this.reviewedBy,
@@ -221,6 +223,10 @@ class SwearReport {
   bool get isConfirmed => status == ReportStatus.confirmed;
   bool get isRejected => status == ReportStatus.rejected;
 
+  /// Total reporter compensation for this report (`count × compensationApplied`), capped at `totalAmount`.
+  double get totalCompensation =>
+      (count * compensationApplied).clamp(0.0, totalAmount);
+
   SwearReport copyWith({
     String? id,
     String? reporterId,
@@ -230,6 +236,7 @@ class SwearReport {
     bool clearNote = false,
     Map<String, int>? swearBreakdown,
     double? rateApplied,
+    double? compensationApplied,
     double? totalAmount,
     ReportStatus? status,
     String? reviewedBy,
@@ -246,6 +253,7 @@ class SwearReport {
       note: clearNote ? null : (note ?? this.note),
       swearBreakdown: swearBreakdown ?? Map<String, int>.from(this.swearBreakdown),
       rateApplied: rateApplied ?? this.rateApplied,
+      compensationApplied: compensationApplied ?? this.compensationApplied,
       totalAmount: totalAmount ?? this.totalAmount,
       status: status ?? this.status,
       reviewedBy: reviewedBy ?? this.reviewedBy,
@@ -265,6 +273,7 @@ class SwearReport {
       'note': note,
       'swearBreakdown': swearBreakdown,
       'rateApplied': rateApplied,
+      'compensationApplied': compensationApplied,
       'totalAmount': totalAmount,
       'status': status.toStr(),
       'reviewedBy': reviewedBy,
@@ -278,6 +287,8 @@ class SwearReport {
   factory SwearReport.fromMap(Map<String, dynamic> map, {String? id}) {
     final countVal = (map['count'] as num?)?.toInt() ?? 1;
     final rateVal = (map['rateApplied'] as num?)?.toDouble() ?? 50.0;
+    final compensationVal =
+        (map['compensationApplied'] as num?)?.toDouble() ?? 0.0;
     final totalVal =
         (map['totalAmount'] as num?)?.toDouble() ?? (countVal * rateVal);
     final parsedCreatedAt = map['createdAt'] != null
@@ -307,6 +318,7 @@ class SwearReport {
       note: map['note'] as String?,
       swearBreakdown: parsedBreakdown,
       rateApplied: rateVal,
+      compensationApplied: compensationVal,
       totalAmount: totalVal,
       status: ReportStatus.fromString(map['status'] as String? ?? 'pending'),
       reviewedBy: map['reviewedBy'] as String?,
@@ -423,7 +435,7 @@ class DebtObligation {
   bool get isPaid => status == DebtStatus.paid;
   bool get isDismissed => status == DebtStatus.dismissed;
 
-  /// Actual payment amount collected toward this obligation (excluding Keeper-swear auto-offsets and dismissed write-offs).
+  /// Actual payment amount collected toward this obligation (excluding Keeper-swear auto-offsets, reporter compensation offsets, and dismissed write-offs).
   double get collectedAmount {
     final maxPossible =
         (originalAmount - remainingBalance).clamp(0.0, originalAmount);
@@ -432,7 +444,11 @@ class DebtObligation {
     }
 
     final realPayments = payments
-        .where((p) => p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET')
+        .where(
+          (p) =>
+              p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET' &&
+              p.recordedBy != 'SYSTEM_REPORTER_COMPENSATION_OFFSET',
+        )
         .toList();
     if (realPayments.isEmpty) return 0.0;
 
@@ -508,7 +524,7 @@ class DebtObligation {
       transferredFromKeeperId: map['transferredFromKeeperId'] as String?,
       payments: (map['payments'] as List<dynamic>?)
               ?.map((p) =>
-                  PaymentRecord.fromMap(Map<String, dynamic>.from(p as Map)))
+                   PaymentRecord.fromMap(Map<String, dynamic>.from(p as Map)))
               .toList() ??
           [],
       createdAt: map['createdAt'] != null
@@ -665,6 +681,7 @@ class SwearLanguage {
 class SystemConfig {
   final String activeKeeperId;
   final double currentRatePerSwear;
+  final double currentCompensationPerSwear;
   final String groupName;
   final int totalSwearsAllTime;
   final List<SwearLanguage> swearLanguages;
@@ -673,6 +690,7 @@ class SystemConfig {
   const SystemConfig({
     required this.activeKeeperId,
     this.currentRatePerSwear = 50.0,
+    this.currentCompensationPerSwear = 0.0,
     this.groupName = 'Our Friend Group',
     this.totalSwearsAllTime = 0,
     this.swearLanguages = const [],
@@ -682,6 +700,7 @@ class SystemConfig {
   SystemConfig copyWith({
     String? activeKeeperId,
     double? currentRatePerSwear,
+    double? currentCompensationPerSwear,
     String? groupName,
     int? totalSwearsAllTime,
     List<SwearLanguage>? swearLanguages,
@@ -690,6 +709,8 @@ class SystemConfig {
     return SystemConfig(
       activeKeeperId: activeKeeperId ?? this.activeKeeperId,
       currentRatePerSwear: currentRatePerSwear ?? this.currentRatePerSwear,
+      currentCompensationPerSwear:
+          currentCompensationPerSwear ?? this.currentCompensationPerSwear,
       groupName: groupName ?? this.groupName,
       totalSwearsAllTime: totalSwearsAllTime ?? this.totalSwearsAllTime,
       swearLanguages:
@@ -702,6 +723,7 @@ class SystemConfig {
     return {
       'activeKeeperId': activeKeeperId,
       'currentRatePerSwear': currentRatePerSwear,
+      'currentCompensationPerSwear': currentCompensationPerSwear,
       'groupName': groupName,
       'totalSwearsAllTime': totalSwearsAllTime,
       'swearLanguages': swearLanguages.map((l) => l.toMap()).toList(),
@@ -726,6 +748,8 @@ class SystemConfig {
       activeKeeperId: map['activeKeeperId'] as String? ?? '',
       currentRatePerSwear:
           (map['currentRatePerSwear'] as num?)?.toDouble() ?? 50.0,
+      currentCompensationPerSwear:
+          (map['currentCompensationPerSwear'] as num?)?.toDouble() ?? 0.0,
       groupName: map['groupName'] as String? ?? 'Our Friend Group',
       totalSwearsAllTime: (map['totalSwearsAllTime'] as num?)?.toInt() ?? 0,
       swearLanguages: parsedLanguages,

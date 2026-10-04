@@ -19,6 +19,7 @@ abstract class IReportRepository {
     String? note,
     Map<String, int>? swearBreakdown,
     required double rateApplied,
+    double compensationApplied = 0.0,
     DateTime? swearDate,
   });
   Future<ReportConfirmationResult> confirmReport({
@@ -113,6 +114,7 @@ abstract class IUserRepository {
 abstract class IConfigRepository {
   Stream<SystemConfig> watchConfig();
   Future<void> updateRate(double newRate);
+  Future<void> updateCompensationRate(double newCompensationRate);
   Future<void> updateKeeper(String newKeeperId);
   Future<void> updateSwearLanguages(List<SwearLanguage> languages);
 }

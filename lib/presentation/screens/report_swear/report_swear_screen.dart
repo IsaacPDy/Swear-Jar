@@ -142,6 +142,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     }
 
     final currentRate = config?.currentRatePerSwear ?? 50.0;
+    final currentCompensation = config?.currentCompensationPerSwear ?? 0.0;
     final totalConsequence = _swearCount * currentRate;
 
     if (_selectedAccusedId == null && users.isNotEmpty) {
@@ -160,6 +161,11 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
         : currentUser;
 
     final isKeeperSelected = _selectedAccusedId == keeper?.id;
+    final isSelfSelected = _selectedAccusedId == currentUser?.id;
+    final totalCompensation =
+        (!isKeeperSelected && !isSelfSelected && currentCompensation > 0)
+            ? (_swearCount * currentCompensation).clamp(0.0, totalConsequence)
+            : 0.0;
     final now = DateTime.now();
     final isToday = _isSameDay(_selectedDate, now);
     final isYesterday =
@@ -291,6 +297,38 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                 Expanded(
                   child: Text(
                     'You\'re reporting the Keeper! If confirmed, unpaid Keeper debts transfer to you and your debt to Keeper is forgiven!',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (totalCompensation > 0) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.accentSuccess.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.accentSuccess.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.card_giftcard_rounded,
+                  color: AppColors.accentSuccess,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Reporter Compensation: ₱${totalCompensation.toStringAsFixed(0)} (₱${currentCompensation.toStringAsFixed(0)}/swear). Deducted from your existing payable if confirmed, or owed to you!',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       color: AppColors.textPrimary,
@@ -761,7 +799,13 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
       isLoading: _isSubmitting,
       onPressed: _selectedAccusedId == null
           ? null
-          : () => _handleSubmit(currentUser, currentRate),
+          : () => _handleSubmit(
+                currentUser,
+                currentRate,
+                (!isKeeperSelected && !isSelfSelected)
+                    ? currentCompensation
+                    : 0.0,
+              ),
     );
 
     final mainLeftStepsCard = NeonCard(
@@ -915,6 +959,45 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
                     ),
                   ],
                 ),
+                if (totalCompensation > 0) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Divider(height: 1, color: AppColors.borderDefault),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.card_giftcard_rounded,
+                        size: 18,
+                        color: AppColors.accentSuccess,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '₱${totalCompensation.toStringAsFixed(0)} (₱${currentCompensation.toStringAsFixed(0)} × $_swearCount)',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accentSuccess,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              'Your Reporter Compensation',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1568,7 +1651,11 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
     });
   }
 
-  Future<void> _handleSubmit(AppUser? currentUser, double currentRate) async {
+  Future<void> _handleSubmit(
+    AppUser? currentUser,
+    double currentRate,
+    double compensationApplied,
+  ) async {
     if (currentUser == null || _selectedAccusedId == null) return;
 
     setState(() => _isSubmitting = true);
@@ -1583,6 +1670,7 @@ class _ReportSwearScreenState extends ConsumerState<ReportSwearScreen>
           note: note.isEmpty ? null : note,
           swearBreakdown: Map<String, int>.from(_selectedSwearCounts),
           rateApplied: currentRate,
+          compensationApplied: compensationApplied,
           swearDate: _selectedDate,
         );
 

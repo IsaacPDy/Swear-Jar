@@ -56,7 +56,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final isDesktop = AppBreakpoints.isDesktop(context);
 
-    if (currentUser != null && currentUser.isPending) {
+    if (currentUser != null &&
+        (currentUser.isPending || currentUser.isRejected)) {
       return Scaffold(
         body: Center(
           child: ConstrainedBox(
@@ -104,68 +105,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     const SizedBox(height: 24),
                     NeonButton(
                       label: 'Switch Account / Sign Out',
-                      type: NeonButtonType.secondary,
-                      width: double.infinity,
-                      onPressed: () =>
-                          ref.read(authRepositoryProvider).signOut(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (currentUser != null && currentUser.isRejected) {
-      return Scaffold(
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: NeonCard(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentError.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.accentError.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.block_rounded,
-                        size: 32,
-                        color: AppColors.accentError,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Access Denied',
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Your account membership request was declined by the group Admin.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 13.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    NeonButton(
-                      label: 'Sign Out',
                       type: NeonButtonType.secondary,
                       width: double.infinity,
                       onPressed: () =>

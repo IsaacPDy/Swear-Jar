@@ -104,8 +104,52 @@ final activeKeeperProvider = Provider<AppUser?>((ref) {
   }
 });
 
+/// Filters out any orphaned debt obligations whose linked report no longer exists
+/// or is not confirmed, and triggers background Firestore reconciliation in Live mode.
+final validDebtsProvider = Provider<List<DebtObligation>>((ref) {
+  final debtsAsync = ref.watch(debtsListProvider);
+  final debts = debtsAsync.valueOrNull ?? [];
+  final reportsAsync = ref.watch(reportsListProvider);
+
+  if (!reportsAsync.hasValue) {
+    return debts;
+  }
+
+  final reports = reportsAsync.value ?? [];
+  final confirmedReportIds = reports
+      .where((r) => r.isConfirmed)
+      .map((r) => r.id)
+      .toSet();
+
+  if (ref.watch(isLiveModeProvider) && debtsAsync.hasValue) {
+    final config = ref.watch(systemConfigProvider).valueOrNull;
+    final firebaseService = ref.read(firebaseDataServiceProvider);
+    Future.microtask(() {
+      firebaseService.reconcileLedgerWithReports(
+        reports: reports,
+        debts: debts,
+        config: config,
+      );
+    });
+  }
+
+  return debts.where((d) => confirmedReportIds.contains(d.reportId)).toList();
+});
+
+final allTimeSwearsCountProvider = Provider<int>((ref) {
+  final reportsAsync = ref.watch(reportsListProvider);
+  if (reportsAsync.hasValue) {
+    final reports = reportsAsync.value ?? [];
+    return reports
+        .where((r) => r.isConfirmed)
+        .fold<int>(0, (sum, r) => sum + r.count);
+  }
+  final config = ref.watch(systemConfigProvider).valueOrNull;
+  return config?.totalSwearsAllTime ?? 0;
+});
+
 final activeDebtsProvider = Provider<List<DebtObligation>>((ref) {
-  final debts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final debts = ref.watch(validDebtsProvider);
   return debts.where((d) => d.isActive).toList();
 });
 
@@ -124,7 +168,7 @@ final myTotalDebtAmountProvider = Provider<double>((ref) {
 final myTotalCollectedAmountProvider = Provider<double>((ref) {
   final user = ref.watch(currentUserProvider).valueOrNull;
   if (user == null) return 0.0;
-  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final allDebts = ref.watch(validDebtsProvider);
   return allDebts
       .where((d) => d.debtorId == user.id)
       .fold<double>(0.0, (sum, debt) => sum + debt.collectedAmount);
@@ -136,12 +180,12 @@ final groupTotalActiveDebtProvider = Provider<double>((ref) {
 });
 
 final groupTotalCollectedProvider = Provider<double>((ref) {
-  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final allDebts = ref.watch(validDebtsProvider);
   return allDebts.fold<double>(0.0, (sum, debt) => sum + debt.collectedAmount);
 });
 
 final activeMemberBalancesProvider = Provider<List<MemberLedgerSummary>>((ref) {
-  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final allDebts = ref.watch(validDebtsProvider);
   final keeper = ref.watch(activeKeeperProvider);
   return LedgerEngine.buildMemberLedgerSummaries(
     allDebts: allDebts,
@@ -151,7 +195,7 @@ final activeMemberBalancesProvider = Provider<List<MemberLedgerSummary>>((ref) {
 });
 
 final memberLedgerHistoryProvider = Provider<List<MemberLedgerSummary>>((ref) {
-  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final allDebts = ref.watch(validDebtsProvider);
   final keeper = ref.watch(activeKeeperProvider);
   return LedgerEngine.buildMemberLedgerSummaries(
     allDebts: allDebts,
@@ -161,7 +205,7 @@ final memberLedgerHistoryProvider = Provider<List<MemberLedgerSummary>>((ref) {
 });
 
 final paymentHistoryProvider = Provider<List<PaymentHistoryItem>>((ref) {
-  final allDebts = ref.watch(debtsListProvider).valueOrNull ?? [];
+  final allDebts = ref.watch(validDebtsProvider);
   return LedgerEngine.buildPaymentHistory(allDebts: allDebts);
 });
 

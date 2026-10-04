@@ -4,6 +4,7 @@ import 'models/models.dart';
 class ReportConfirmationResult {
   final SwearReport updatedReport;
   final DebtObligation createdDebt;
+  final DebtObligation? createdCompensationDebt;
   final List<DebtObligation> updatedDebts;
   final List<DebtObligation> transferredDebts;
   final List<DebtObligation> cancelledReporterDebts;
@@ -11,6 +12,7 @@ class ReportConfirmationResult {
   const ReportConfirmationResult({
     required this.updatedReport,
     required this.createdDebt,
+    this.createdCompensationDebt,
     this.updatedDebts = const [],
     this.transferredDebts = const [],
     this.cancelledReporterDebts = const [],
@@ -64,12 +66,24 @@ class LedgerEngine {
     return count * rateApplied;
   }
 
+  /// Calculate total reporter compensation for a swear report (`count × compensationApplied`), capped at `totalAmount`
+  static double calculateCompensation(
+    int count,
+    double compensationApplied,
+    double totalAmount,
+  ) {
+    if (count < 1 || compensationApplied <= 0) return 0.0;
+    return (count * compensationApplied).clamp(0.0, totalAmount);
+  }
+
   /// Confirm a swear report with full invariant enforcement.
   ///
   /// Invariants enforced:
-  /// 1. Consequence rate captured in report is locked.
+  /// 1. Consequence rate and compensation rate captured in report are locked.
   /// 2. If accused is a normal member:
-  ///    - A new active debt is created with debtor = accusedId, recipient = activeKeeperId.
+  ///    - Reporter compensation (`count × compensationApplied`) is deducted FIFO from the reporter's active payables first.
+  ///    - Any remaining compensation becomes a receivable (`isTransferred: true`) owed by the accused to the reporter.
+  ///    - The remainder of the penalty (`totalAmount - excessCompensation`) is owed by the accused to `activeKeeperId`.
   /// 3. If accused is the Keeper ("When the Keeper Swears" transfer rule):
   ///    - All currently active debts where recipient == activeKeeperId are transferred to the reporter.
   ///    - If the reporter owed any active debt to the Keeper, that debt is cancelled/forgiven immediately.
@@ -94,24 +108,143 @@ class LedgerEngine {
     final isKeeperAccused = report.accusedId == activeKeeperId;
 
     if (!isKeeperAccused) {
-      // Normal swear report confirmation
-      final newDebt = DebtObligation(
-        id: _uuid.v4(),
-        reportId: report.id,
-        debtorId: report.accusedId,
-        recipientId: activeKeeperId,
-        originalAmount: totalAmount,
-        remainingBalance: totalAmount,
-        status: DebtStatus.active,
-        isTransferred: false,
-        createdAt: timestamp,
-      );
+      final canReceiveCompensation =
+          report.reporterId != report.accusedId &&
+          report.compensationApplied > 0;
+      final totalCompensation = canReceiveCompensation
+          ? calculateCompensation(
+              report.count,
+              report.compensationApplied,
+              totalAmount,
+            )
+          : 0.0;
 
-      return ReportConfirmationResult(
-        updatedReport: confirmedReport,
-        createdDebt: newDebt,
-        updatedDebts: [],
-      );
+      double remainingComp = totalCompensation;
+      final deductedReporterDebts = <DebtObligation>[];
+
+      if (remainingComp > 0.001) {
+        final reporterDebts = existingActiveDebts
+            .where(
+              (d) =>
+                  d.isActive &&
+                  d.debtorId == report.reporterId &&
+                  d.remainingBalance > 0.001,
+            )
+            .toList()
+          ..sort((a, b) {
+            final aToKeeper = a.recipientId == activeKeeperId ? 0 : 1;
+            final bToKeeper = b.recipientId == activeKeeperId ? 0 : 1;
+            if (aToKeeper != bToKeeper) return aToKeeper.compareTo(bToKeeper);
+            return a.createdAt.compareTo(b.createdAt);
+          });
+
+        for (final debt in reporterDebts) {
+          if (remainingComp <= 0.001) break;
+          final deduct = remainingComp > debt.remainingBalance
+              ? debt.remainingBalance
+              : remainingComp;
+          final newRemaining = debt.remainingBalance - deduct;
+          final isFullyPaid = newRemaining <= 0.001;
+
+          final updatedDebt = debt.copyWith(
+            remainingBalance: isFullyPaid ? 0.0 : newRemaining,
+            status: isFullyPaid ? DebtStatus.paid : DebtStatus.active,
+            resolvedAt: isFullyPaid ? timestamp : null,
+            payments: [
+              ...debt.payments,
+              PaymentRecord(
+                id: _uuid.v4(),
+                debtId: debt.id,
+                amount: deduct,
+                recordedBy: 'SYSTEM_REPORTER_COMPENSATION_OFFSET',
+                recordedAt: timestamp,
+                note: 'Deducted via Reporter Compensation',
+              ),
+            ],
+          );
+          deductedReporterDebts.add(updatedDebt);
+          remainingComp -= deduct;
+        }
+      }
+
+      final excessCompensation =
+          (report.reporterId != activeKeeperId && remainingComp > 0.001)
+              ? remainingComp
+              : 0.0;
+      final keeperAmount =
+          (totalAmount - excessCompensation).clamp(0.0, totalAmount);
+
+      if (keeperAmount > 0.001 && excessCompensation > 0.001) {
+        final keeperDebt = DebtObligation(
+          id: _uuid.v4(),
+          reportId: report.id,
+          debtorId: report.accusedId,
+          recipientId: activeKeeperId,
+          originalAmount: keeperAmount,
+          remainingBalance: keeperAmount,
+          status: DebtStatus.active,
+          isTransferred: false,
+          createdAt: timestamp,
+        );
+
+        final reporterReceivableDebt = DebtObligation(
+          id: _uuid.v4(),
+          reportId: report.id,
+          debtorId: report.accusedId,
+          recipientId: report.reporterId,
+          originalAmount: excessCompensation,
+          remainingBalance: excessCompensation,
+          status: DebtStatus.active,
+          isTransferred: true,
+          createdAt: timestamp,
+        );
+
+        return ReportConfirmationResult(
+          updatedReport: confirmedReport,
+          createdDebt: keeperDebt,
+          createdCompensationDebt: reporterReceivableDebt,
+          updatedDebts: deductedReporterDebts,
+          cancelledReporterDebts: deductedReporterDebts,
+        );
+      } else if (keeperAmount <= 0.001 && excessCompensation > 0.001) {
+        final reporterReceivableDebt = DebtObligation(
+          id: _uuid.v4(),
+          reportId: report.id,
+          debtorId: report.accusedId,
+          recipientId: report.reporterId,
+          originalAmount: excessCompensation,
+          remainingBalance: excessCompensation,
+          status: DebtStatus.active,
+          isTransferred: true,
+          createdAt: timestamp,
+        );
+
+        return ReportConfirmationResult(
+          updatedReport: confirmedReport,
+          createdDebt: reporterReceivableDebt,
+          updatedDebts: deductedReporterDebts,
+          cancelledReporterDebts: deductedReporterDebts,
+        );
+      } else {
+        final newDebt = DebtObligation(
+          id: _uuid.v4(),
+          reportId: report.id,
+          debtorId: report.accusedId,
+          recipientId: activeKeeperId,
+          originalAmount: totalAmount,
+          remainingBalance: totalAmount,
+          status: DebtStatus.active,
+          isTransferred: false,
+          createdAt: timestamp,
+        );
+
+        return ReportConfirmationResult(
+          updatedReport: confirmedReport,
+          createdDebt: newDebt,
+          updatedDebts: deductedReporterDebts,
+          cancelledReporterDebts: deductedReporterDebts,
+        );
+      }
     } else {
       // Keeper was caught swearing!
       final reporterId = report.reporterId;
@@ -412,7 +545,11 @@ class LedgerEngine {
 
     for (final debt in allDebts) {
       final realPayments = debt.payments
-          .where((p) => p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET')
+          .where(
+            (p) =>
+                p.recordedBy != 'SYSTEM_KEEPER_SWEAR_OFFSET' &&
+                p.recordedBy != 'SYSTEM_REPORTER_COMPENSATION_OFFSET',
+          )
           .toList();
       if (realPayments.isEmpty) continue;
 

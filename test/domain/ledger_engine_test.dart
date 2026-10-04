@@ -752,6 +752,188 @@ void main() {
       expect(afterDelete.first.payments, isEmpty);
       expect(afterDelete.first.status, DebtStatus.active);
     });
+
+    test('Reporter Compensation: when reporter has 0 payable, splits penalty between Keeper and reporter receivable', () {
+      // Alice reports Bob for 2 swears at ₱50/swear (₱100 total) with ₱15/swear compensation (₱30 total compensation)
+      final report = SwearReport(
+        id: 'rep_comp_zero_debt',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 2,
+        rateApplied: 50.0,
+        compensationApplied: 15.0,
+        totalAmount: 100.0,
+        status: ReportStatus.pending,
+        createdAt: DateTime(2026, 4, 1),
+      );
+
+      final result = LedgerEngine.confirmReport(
+        report: report,
+        activeKeeperId: keeperId,
+        reviewerId: keeperId,
+        existingActiveDebts: [],
+      );
+
+      expect(result.updatedReport.status, ReportStatus.confirmed);
+      expect(result.cancelledReporterDebts, isEmpty);
+
+      // Bob owes ₱70 to Keeper
+      expect(result.createdDebt.debtorId, memberBobId);
+      expect(result.createdDebt.recipientId, keeperId);
+      expect(result.createdDebt.originalAmount, 70.0);
+      expect(result.createdDebt.remainingBalance, 70.0);
+      expect(result.createdDebt.isTransferred, isFalse);
+
+      // Bob owes ₱30 receivable to Alice
+      expect(result.createdCompensationDebt, isNotNull);
+      expect(result.createdCompensationDebt!.debtorId, memberBobId);
+      expect(result.createdCompensationDebt!.recipientId, memberAliceId);
+      expect(result.createdCompensationDebt!.originalAmount, 30.0);
+      expect(result.createdCompensationDebt!.remainingBalance, 30.0);
+      expect(result.createdCompensationDebt!.isTransferred, isTrue);
+    });
+
+    test('Reporter Compensation: when reporter has existing payable >= compensation, deducts from reporter payable FIFO', () {
+      // Alice currently owes Keeper ₱50
+      final aliceExistingDebt = DebtObligation(
+        id: 'debt_alice_existing',
+        reportId: 'rep_prev',
+        debtorId: memberAliceId,
+        recipientId: keeperId,
+        originalAmount: 50.0,
+        remainingBalance: 50.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 4, 1),
+      );
+
+      // Alice reports Bob for 2 swears at ₱50/swear (₱100 total) with ₱10/swear compensation (₱20 total compensation)
+      final report = SwearReport(
+        id: 'rep_comp_deduct',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 2,
+        rateApplied: 50.0,
+        compensationApplied: 10.0,
+        totalAmount: 100.0,
+        status: ReportStatus.pending,
+        createdAt: DateTime(2026, 4, 2),
+      );
+
+      final result = LedgerEngine.confirmReport(
+        report: report,
+        activeKeeperId: keeperId,
+        reviewerId: keeperId,
+        existingActiveDebts: [aliceExistingDebt],
+      );
+
+      // Alice's existing debt is reduced from ₱50 to ₱30, and collectedAmount remains 0 (since offset is non-cash)
+      expect(result.cancelledReporterDebts.length, 1);
+      final updatedAliceDebt = result.cancelledReporterDebts.first;
+      expect(updatedAliceDebt.remainingBalance, 30.0);
+      expect(updatedAliceDebt.status, DebtStatus.active);
+      expect(updatedAliceDebt.collectedAmount, 0.0);
+
+      // Since all ₱20 compensation went to reducing Alice's debt to Keeper, Bob owes the full ₱100 to Keeper
+      expect(result.createdDebt.debtorId, memberBobId);
+      expect(result.createdDebt.recipientId, keeperId);
+      expect(result.createdDebt.originalAmount, 100.0);
+      expect(result.createdDebt.remainingBalance, 100.0);
+      expect(result.createdCompensationDebt, isNull);
+    });
+
+    test('Reporter Compensation: when reporter payable < compensation, wipes payable to 0 and creates receivable for remainder', () {
+      // Alice owes Keeper ₱15
+      final aliceSmallDebt = DebtObligation(
+        id: 'debt_alice_small',
+        reportId: 'rep_prev_small',
+        debtorId: memberAliceId,
+        recipientId: keeperId,
+        originalAmount: 50.0,
+        remainingBalance: 15.0,
+        status: DebtStatus.active,
+        createdAt: DateTime(2026, 4, 1),
+      );
+
+      // Alice reports Bob for 2 swears at ₱50/swear (₱100 total) with ₱20/swear compensation (₱40 total compensation)
+      final report = SwearReport(
+        id: 'rep_comp_split',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 2,
+        rateApplied: 50.0,
+        compensationApplied: 20.0,
+        totalAmount: 100.0,
+        status: ReportStatus.pending,
+        createdAt: DateTime(2026, 4, 2),
+      );
+
+      final result = LedgerEngine.confirmReport(
+        report: report,
+        activeKeeperId: keeperId,
+        reviewerId: keeperId,
+        existingActiveDebts: [aliceSmallDebt],
+      );
+
+      // 1. Alice's ₱15 remaining debt is completely wiped (status = paid, remainingBalance = 0)
+      expect(result.cancelledReporterDebts.length, 1);
+      final wipedAliceDebt = result.cancelledReporterDebts.first;
+      expect(wipedAliceDebt.remainingBalance, 0.0);
+      expect(wipedAliceDebt.status, DebtStatus.paid);
+
+      // 2. Remaining ₱25 compensation (₱40 - ₱15) becomes a receivable owed by Bob to Alice
+      expect(result.createdCompensationDebt, isNotNull);
+      expect(result.createdCompensationDebt!.debtorId, memberBobId);
+      expect(result.createdCompensationDebt!.recipientId, memberAliceId);
+      expect(result.createdCompensationDebt!.originalAmount, 25.0);
+      expect(result.createdCompensationDebt!.remainingBalance, 25.0);
+      expect(result.createdCompensationDebt!.isTransferred, isTrue);
+
+      // 3. Bob owes the remaining ₱75 (₱100 - ₱25) to the Keeper
+      expect(result.createdDebt.debtorId, memberBobId);
+      expect(result.createdDebt.recipientId, keeperId);
+      expect(result.createdDebt.originalAmount, 75.0);
+      expect(result.createdDebt.remainingBalance, 75.0);
+    });
+
+    test('deleteReport removes all debts linked to reportId and returns negative swearCountDelta for confirmed reports', () {
+      final report = SwearReport(
+        id: 'rep_to_delete',
+        reporterId: memberAliceId,
+        accusedId: memberBobId,
+        count: 3,
+        rateApplied: 50.0,
+        compensationApplied: 10.0,
+        totalAmount: 150.0,
+        status: ReportStatus.pending,
+        createdAt: DateTime(2026, 4, 3),
+      );
+
+      final confirmed = LedgerEngine.confirmReport(
+        report: report,
+        activeKeeperId: keeperId,
+        reviewerId: keeperId,
+        existingActiveDebts: [],
+      );
+
+      final allDebts = <DebtObligation>[
+        confirmed.createdDebt,
+        if (confirmed.createdCompensationDebt != null)
+          confirmed.createdCompensationDebt!,
+      ];
+      expect(allDebts.length, 2);
+
+      final deletion = LedgerEngine.deleteReport(
+        report: confirmed.updatedReport,
+        existingDebts: allDebts,
+      );
+
+      expect(deletion.deletedReportId, 'rep_to_delete');
+      expect(deletion.deletedDebtIds.toSet(), {
+        confirmed.createdDebt.id,
+        confirmed.createdCompensationDebt!.id,
+      });
+      expect(deletion.swearCountDelta, -3);
+    });
   });
 }
 

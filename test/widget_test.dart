@@ -512,8 +512,46 @@ void main() {
     expect(find.text('SWEAR ANALYTICS • ALL MONTHS'), findsOneWidget);
     expect(find.text('REPORT LOG (4)'), findsOneWidget);
   });
+
+  testWidgets(
+      'Denying a pending user does not block them from signing in again and waiting for access',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final container = ProviderContainer(
+      overrides: [
+        isLiveModeProvider.overrideWith((ref) => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // 1. Admin rejects the pending user (user_alex)
+    await container.read(userRepositoryProvider).rejectUser('user_alex');
+    expect(container.read(pendingUsersProvider), isEmpty);
+
+    // 2. Denied user signs in again to have another go
+    await container.read(authRepositoryProvider).signInWithDemo('user_alex');
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SwearJarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // User sees Approval Pending (waiting for access) instead of Access Denied
+    expect(find.text('Approval Pending'), findsOneWidget);
+    expect(find.text('Access Denied'), findsNothing);
+
+    // User also reappears in the Admin pending sign-ins list
+    expect(container.read(pendingUsersProvider).length, 1);
+    expect(container.read(pendingUsersProvider).first.id, 'user_alex');
+  });
 }
-
-
-
 
